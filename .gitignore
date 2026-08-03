@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.corepack/
+
+# Build output
+.next/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+apps/api/src/generated/prisma/
+
+# Runtime data
+logs/
+*.log
+tmp/
+.cache/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Tests
+playwright-report/
+test-results/
+
+# IDE and operating system
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.DS_Store
+Thumbs.db
+
+# Local infrastructure volumes
+.data/
+backups/
+
+# Generated API contract artifacts
+packages/api-client/src/generated/
