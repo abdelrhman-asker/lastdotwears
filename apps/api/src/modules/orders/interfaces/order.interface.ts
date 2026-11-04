@@ -31,6 +31,8 @@ export interface OrderPaymentRecord {
   method: PaymentMethod;
   status: PaymentStatus;
   amountPiasters: number;
+  proofImagePublicId: string | null;
+  proofSubmittedAt: Date | null;
   instaPayReference: string | null;
   confirmationNote: string | null;
   confirmedAt: Date | null;
@@ -67,7 +69,7 @@ export interface OrderRecord {
   id: string;
   orderNumber: string;
   invoiceNumber: string;
-  userId: string;
+  userId: string | null;
   status: OrderStatus;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;

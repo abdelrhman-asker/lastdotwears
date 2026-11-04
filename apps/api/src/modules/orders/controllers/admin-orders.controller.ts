@@ -1,5 +1,19 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { createReadStream } from 'node:fs';
+
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Res,
+  StreamableFile,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 
 import { CurrentUser } from '../../../common/decorators/current-user.decorator.js';
 import { Roles } from '../../../common/decorators/roles.decorator.js';
@@ -24,6 +38,21 @@ export class AdminOrdersController {
   @ApiOkResponse({ type: PaginatedOrdersResponseDto })
   list(@Query() query: ListAdminOrdersQueryDto): Promise<PaginatedOrdersResponseDto> {
     return this.service.listAdmin(query);
+  }
+
+  @Get(':id/payment-proof')
+  @ApiOperation({ summary: 'View a customer’s submitted InstaPay transfer receipt' })
+  async paymentProof(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<StreamableFile> {
+    const image = await this.service.adminPaymentProof(id);
+    response.set({
+      'Cache-Control': 'private, no-store',
+      'Content-Length': String(image.bytes),
+      'Content-Type': image.contentType,
+    });
+    return new StreamableFile(createReadStream(image.path));
   }
 
   @Get(':id')

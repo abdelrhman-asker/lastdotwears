@@ -2,9 +2,11 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 
+import { Button } from '@/components/ui/button';
 import { StatusMessage } from '@/components/ui/status-message';
-import { useOrder } from '@/hooks/use-checkout';
+import { useInstaPayProof, useOrder, useSubmitInstaPayProof } from '@/hooks/use-checkout';
 import { errorMessage } from '@/lib/api/http-client';
 import { formatEgp } from '@/lib/format/currency';
 import type { OrderStatus } from '@/types/orders';
@@ -49,10 +51,15 @@ export function OrderConfirmationPage({ orderNumber }: { orderNumber: string }) 
   }
 
   const data = order.data;
+  const paymentProofSubmitted = Boolean(data.payment.proofSubmittedAt);
   return (
     <div className="mx-auto max-w-5xl px-5 py-14 sm:px-8 lg:py-20">
       <header className="border-b border-stone-300 pb-8 text-center">
-        <p className="text-[10px] tracking-[0.22em] text-stone-500 uppercase">Order confirmed</p>
+        <p className="text-[10px] tracking-[0.22em] text-stone-500 uppercase">
+          {data.paymentMethod === 'INSTAPAY' && !paymentProofSubmitted
+            ? 'Complete your payment'
+            : 'Order received'}
+        </p>
         <h1 className="mt-5 font-serif text-5xl tracking-[-0.04em] sm:text-6xl">
           Thank you, {data.customerFirstName}.
         </h1>
@@ -94,13 +101,25 @@ export function OrderConfirmationPage({ orderNumber }: { orderNumber: string }) 
                   <p className="mt-5 text-sm leading-6 text-stone-600">
                     {data.instaPayInstructions.instructions}
                   </p>
+                  <div className="mt-5 border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+                    <strong>Important:</strong> enter order number{' '}
+                    <span className="font-semibold">{data.orderNumber}</span> in the InstaPay
+                    payment reason or note.
+                  </div>
                 </div>
               </div>
               <div className="mt-6">
-                <StatusMessage>
-                  Your order remains Waiting for Payment until an administrator confirms the
-                  transfer.
-                </StatusMessage>
+                {paymentProofSubmitted ? (
+                  <div className="space-y-5">
+                    <StatusMessage tone="success">
+                      Your transfer receipt was submitted successfully. Last Dot will review the
+                      payment before confirming your order.
+                    </StatusMessage>
+                    <PaymentProofImage orderNumber={data.orderNumber} />
+                  </div>
+                ) : (
+                  <PaymentProofForm orderNumber={data.orderNumber} />
+                )}
               </div>
             </section>
           ) : (
@@ -160,12 +179,14 @@ export function OrderConfirmationPage({ orderNumber }: { orderNumber: string }) 
             </p>
             <p className="mt-3 text-stone-500">{data.customerPhone}</p>
           </section>
-          <Link
-            href={`/orders/${data.orderNumber}/invoice`}
-            className="grid min-h-12 place-items-center border border-stone-950 bg-white px-5 text-xs tracking-[0.14em] uppercase"
-          >
-            View printable invoice
-          </Link>
+          {data.paymentMethod !== 'INSTAPAY' || paymentProofSubmitted ? (
+            <Link
+              href={`/orders/${data.orderNumber}/invoice`}
+              className="grid min-h-12 place-items-center border border-stone-950 bg-white px-5 text-xs tracking-[0.14em] uppercase"
+            >
+              View printable invoice
+            </Link>
+          ) : null}
           <Link
             href="/products"
             className="grid min-h-12 place-items-center bg-stone-950 px-5 text-xs tracking-[0.14em] text-white uppercase"
@@ -175,6 +196,75 @@ export function OrderConfirmationPage({ orderNumber }: { orderNumber: string }) 
         </aside>
       </div>
     </div>
+  );
+}
+
+function PaymentProofForm({ orderNumber }: { orderNumber: string }) {
+  const [file, setFile] = useState<File | null>(null);
+  const submit = useSubmitInstaPayProof(orderNumber);
+
+  return (
+    <form
+      className="border border-stone-300 bg-[#eeebe5] p-5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (file) submit.mutate(file);
+      }}
+    >
+      <h3 className="font-serif text-2xl">Send your transfer receipt</h3>
+      <p className="mt-2 text-sm leading-6 text-stone-600">
+        Complete the transfer, take a screenshot, then upload it here. Your order is submitted to
+        Last Dot only after this step.
+      </p>
+      <label className="mt-5 block text-xs font-medium" htmlFor="paymentProof">
+        Transfer screenshot
+      </label>
+      <input
+        accept="image/jpeg,image/png,image/webp,image/avif"
+        className="mt-2 block w-full border border-stone-300 bg-white p-3 text-sm file:mr-4 file:border-0 file:bg-stone-950 file:px-4 file:py-2 file:text-xs file:text-white"
+        id="paymentProof"
+        onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+        type="file"
+      />
+      <p className="mt-2 text-xs text-stone-500">JPEG, PNG, WebP, or AVIF. Maximum 8 MB.</p>
+      {submit.error ? (
+        <div className="mt-4">
+          <StatusMessage tone="error">{errorMessage(submit.error)}</StatusMessage>
+        </div>
+      ) : null}
+      <Button className="mt-5 w-full" disabled={!file || submit.isPending} type="submit">
+        {submit.isPending ? 'Submitting receipt…' : 'I sent the payment — submit receipt'}
+      </Button>
+    </form>
+  );
+}
+
+function PaymentProofImage({ orderNumber }: { orderNumber: string }) {
+  const proof = useInstaPayProof(orderNumber, true);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!proof.data) return;
+    const url = URL.createObjectURL(proof.data);
+    setImageUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [proof.data]);
+
+  if (proof.isError) {
+    return (
+      <StatusMessage tone="error">The transfer receipt image could not be loaded.</StatusMessage>
+    );
+  }
+  if (proof.isPending || !imageUrl) {
+    return <div className="h-48 w-full animate-pulse bg-stone-100" aria-label="Loading receipt" />;
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      alt={`Transfer receipt for order ${orderNumber}`}
+      className="max-h-[520px] w-full border border-stone-200 object-contain"
+      src={imageUrl}
+    />
   );
 }
 

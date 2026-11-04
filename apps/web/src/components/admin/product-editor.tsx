@@ -20,17 +20,20 @@ import {
   listAdminCategories,
   updateProduct,
   updateProductImage,
+  updateVariant,
   uploadProductImage,
 } from '@/lib/api/catalog';
 import { errorMessage } from '@/lib/api/http-client';
 import {
   egpToPiasters,
   productEditSchema,
+  variantEditSchema,
   variantSchema,
   type ProductEditFormInput,
+  type VariantEditFormInput,
   type VariantFormInput,
 } from '@/lib/validation/catalog';
-import type { Product } from '@/types/catalog';
+import type { Product, ProductVariant } from '@/types/catalog';
 
 const selectClass = 'h-12 w-full border border-stone-300 bg-white px-3 text-sm outline-none';
 
@@ -163,8 +166,115 @@ function ProductDetailsForm({ product }: { product: Product }) {
   );
 }
 
+function VariantEditForm({
+  onDone,
+  productId,
+  variant,
+}: {
+  onDone: () => void;
+  productId: string;
+  variant: ProductVariant;
+}) {
+  const queryClient = useQueryClient();
+  const form = useForm<VariantEditFormInput>({
+    defaultValues: {
+      sku: variant.sku,
+      size: variant.size,
+      colorName: variant.colorName,
+      colorHex: variant.colorHex ?? '#111111',
+      lowStockThreshold: variant.lowStockThreshold,
+      isActive: variant.isActive,
+      priceOverrideEgp: variant.priceOverridePiasters
+        ? (variant.priceOverridePiasters / 100).toFixed(2)
+        : '',
+    },
+    resolver: zodResolver(variantEditSchema),
+  });
+  const mutation = useMutation({
+    mutationFn: (values: VariantEditFormInput) =>
+      updateVariant(productId, variant.id, {
+        sku: values.sku,
+        size: values.size,
+        colorName: values.colorName,
+        colorHex: values.colorHex,
+        lowStockThreshold: values.lowStockThreshold,
+        isActive: values.isActive,
+        priceOverridePiasters: values.priceOverrideEgp
+          ? egpToPiasters(values.priceOverrideEgp)
+          : null,
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'product', productId] });
+      onDone();
+    },
+  });
+
+  return (
+    <form
+      className="mt-7 grid gap-4 border-t border-stone-200 pt-6 sm:grid-cols-3"
+      onSubmit={form.handleSubmit((values) => mutation.mutate(values))}
+    >
+      <p className="text-sm font-medium sm:col-span-3">Editing {variant.sku}</p>
+      {mutation.isError ? (
+        <div className="sm:col-span-3">
+          <StatusMessage tone="error">{errorMessage(mutation.error)}</StatusMessage>
+        </div>
+      ) : null}
+      <Field error={form.formState.errors.sku?.message} htmlFor="editSku" label="SKU">
+        <Input id="editSku" {...form.register('sku')} />
+      </Field>
+      <Field error={form.formState.errors.size?.message} htmlFor="editSize" label="Size">
+        <Input id="editSize" {...form.register('size')} />
+      </Field>
+      <Field error={form.formState.errors.colorName?.message} htmlFor="editColor" label="Color">
+        <Input id="editColor" {...form.register('colorName')} />
+      </Field>
+      <Field error={form.formState.errors.colorHex?.message} htmlFor="editHex" label="Color hex">
+        <Input id="editHex" {...form.register('colorHex')} />
+      </Field>
+      <Field
+        error={form.formState.errors.lowStockThreshold?.message}
+        htmlFor="editThreshold"
+        label="Low-stock level"
+      >
+        <Input
+          id="editThreshold"
+          min={0}
+          type="number"
+          {...form.register('lowStockThreshold', { valueAsNumber: true })}
+        />
+      </Field>
+      <Field
+        error={form.formState.errors.priceOverrideEgp?.message}
+        htmlFor="editPriceOverride"
+        label="Price override (EGP)"
+      >
+        <Input
+          id="editPriceOverride"
+          placeholder="Leave empty"
+          {...form.register('priceOverrideEgp')}
+        />
+      </Field>
+      <div className="flex items-center gap-4 text-sm sm:col-span-3">
+        <label className="flex items-center gap-3">
+          <input type="checkbox" {...form.register('isActive')} /> Active
+        </label>
+      </div>
+      <div className="flex items-center gap-3 sm:col-span-3">
+        <Button disabled={mutation.isPending} type="submit">
+          {mutation.isPending ? 'Saving…' : 'Save variant'}
+        </Button>
+        <Button onClick={onDone} type="button" variant="ghost">
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 function VariantsSection({ product }: { product: Product }) {
   const queryClient = useQueryClient();
+  const [editingId, setEditingId] = useState<string | null>(null);
   const form = useForm<VariantFormInput>({
     defaultValues: {
       sku: '',
@@ -195,12 +305,14 @@ function VariantsSection({ product }: { product: Product }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'product', product.id] }),
   });
   const requestError = create.error ?? remove.error;
+  const editing = product.variants.find((variant) => variant.id === editingId) ?? null;
 
   return (
     <section className="border border-stone-200 bg-white p-5 sm:p-7">
       <h2 className="text-lg font-medium">Variants</h2>
       <p className="mt-1 text-sm text-stone-500">
-        Size/color combinations own their SKU and inventory.
+        Size/color combinations own their SKU and inventory. Re-adding a removed size and color
+        restores that variant with its history.
       </p>
       {requestError ? (
         <div className="mt-5">
@@ -216,7 +328,7 @@ function VariantsSection({ product }: { product: Product }) {
               <th>Color</th>
               <th>Stock</th>
               <th>Status</th>
-              <th className="text-right">Action</th>
+              <th className="text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-stone-100">
@@ -233,7 +345,10 @@ function VariantsSection({ product }: { product: Product }) {
                 </td>
                 <td>{variant.stockQuantity}</td>
                 <td>{variant.isActive ? 'Active' : 'Inactive'}</td>
-                <td className="text-right">
+                <td className="text-right whitespace-nowrap">
+                  <Button onClick={() => setEditingId(variant.id)} variant="ghost">
+                    Edit
+                  </Button>
                   <Button
                     disabled={remove.isPending}
                     onClick={() => {
@@ -249,60 +364,69 @@ function VariantsSection({ product }: { product: Product }) {
           </tbody>
         </table>
       </div>
-      <form
-        className="mt-7 grid gap-4 border-t border-stone-200 pt-6 sm:grid-cols-3"
-        onSubmit={form.handleSubmit((values) => create.mutate(values))}
-      >
-        <Field error={form.formState.errors.sku?.message} htmlFor="variantSku" label="SKU">
-          <Input id="variantSku" {...form.register('sku')} />
-        </Field>
-        <Field error={form.formState.errors.size?.message} htmlFor="variantSize" label="Size">
-          <Input id="variantSize" {...form.register('size')} />
-        </Field>
-        <Field
-          error={form.formState.errors.colorName?.message}
-          htmlFor="variantColor"
-          label="Color"
+      {editing ? (
+        <VariantEditForm
+          key={editing.id}
+          onDone={() => setEditingId(null)}
+          productId={product.id}
+          variant={editing}
+        />
+      ) : (
+        <form
+          className="mt-7 grid gap-4 border-t border-stone-200 pt-6 sm:grid-cols-3"
+          onSubmit={form.handleSubmit((values) => create.mutate(values))}
         >
-          <Input id="variantColor" {...form.register('colorName')} />
-        </Field>
-        <Field
-          error={form.formState.errors.colorHex?.message}
-          htmlFor="variantHex"
-          label="Color hex"
-        >
-          <Input id="variantHex" {...form.register('colorHex')} />
-        </Field>
-        <Field
-          error={form.formState.errors.stockQuantity?.message}
-          htmlFor="variantStock"
-          label="Opening stock"
-        >
-          <Input
-            id="variantStock"
-            min={0}
-            type="number"
-            {...form.register('stockQuantity', { valueAsNumber: true })}
-          />
-        </Field>
-        <Field
-          error={form.formState.errors.lowStockThreshold?.message}
-          htmlFor="variantThreshold"
-          label="Low-stock level"
-        >
-          <Input
-            id="variantThreshold"
-            min={0}
-            type="number"
-            {...form.register('lowStockThreshold', { valueAsNumber: true })}
-          />
-        </Field>
-        <div className="sm:col-span-3">
-          <Button disabled={create.isPending} type="submit">
-            {create.isPending ? 'Adding…' : 'Add variant'}
-          </Button>
-        </div>
-      </form>
+          <Field error={form.formState.errors.sku?.message} htmlFor="variantSku" label="SKU">
+            <Input id="variantSku" {...form.register('sku')} />
+          </Field>
+          <Field error={form.formState.errors.size?.message} htmlFor="variantSize" label="Size">
+            <Input id="variantSize" {...form.register('size')} />
+          </Field>
+          <Field
+            error={form.formState.errors.colorName?.message}
+            htmlFor="variantColor"
+            label="Color"
+          >
+            <Input id="variantColor" {...form.register('colorName')} />
+          </Field>
+          <Field
+            error={form.formState.errors.colorHex?.message}
+            htmlFor="variantHex"
+            label="Color hex"
+          >
+            <Input id="variantHex" {...form.register('colorHex')} />
+          </Field>
+          <Field
+            error={form.formState.errors.stockQuantity?.message}
+            htmlFor="variantStock"
+            label="Opening stock"
+          >
+            <Input
+              id="variantStock"
+              min={0}
+              type="number"
+              {...form.register('stockQuantity', { valueAsNumber: true })}
+            />
+          </Field>
+          <Field
+            error={form.formState.errors.lowStockThreshold?.message}
+            htmlFor="variantThreshold"
+            label="Low-stock level"
+          >
+            <Input
+              id="variantThreshold"
+              min={0}
+              type="number"
+              {...form.register('lowStockThreshold', { valueAsNumber: true })}
+            />
+          </Field>
+          <div className="sm:col-span-3">
+            <Button disabled={create.isPending} type="submit">
+              {create.isPending ? 'Adding…' : 'Add variant'}
+            </Button>
+          </div>
+        </form>
+      )}
     </section>
   );
 }
@@ -340,12 +464,23 @@ function ImagesSection({ product }: { product: Product }) {
   }
 
   const requestError = upload.error ?? metadata.error ?? remove.error;
+  const primaryImage = product.images.find((image) => image.isPrimary) ?? product.images[0];
+  const sideImage = product.images.find((image) => image.id !== primaryImage?.id);
   return (
     <section className="border border-stone-200 bg-white p-5 sm:p-7">
       <h2 className="text-lg font-medium">Product images</h2>
       <p className="mt-1 text-sm text-stone-500">
-        JPEG, PNG, WebP, or AVIF. Images are stored in Cloudinary.
+        Add two matching product images for the homepage rail: mark the centered front view as
+        Primary, then upload the side view as the first secondary image. PNG or WebP with a
+        transparent background gives the best result.
       </p>
+      {product.images.length < 2 ? (
+        <div className="mt-4">
+          <StatusMessage>
+            Add a side-view image to enable the side-to-front rotation on the homepage.
+          </StatusMessage>
+        </div>
+      ) : null}
       {requestError ? (
         <div className="mt-5">
           <StatusMessage tone="error">{errorMessage(requestError)}</StatusMessage>
@@ -363,7 +498,18 @@ function ImagesSection({ product }: { product: Product }) {
                 src={image.secureUrl}
               />
             </div>
-            <p className="mt-3 line-clamp-2 text-sm">{image.altText}</p>
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <p className="line-clamp-2 text-sm">{image.altText}</p>
+              {image.id === primaryImage?.id ? (
+                <span className="shrink-0 bg-stone-950 px-2 py-1 text-[9px] tracking-[0.12em] text-white uppercase">
+                  Front
+                </span>
+              ) : image.id === sideImage?.id ? (
+                <span className="shrink-0 bg-amber-100 px-2 py-1 text-[9px] tracking-[0.12em] text-amber-900 uppercase">
+                  Side
+                </span>
+              ) : null}
+            </div>
             <div className="mt-3 flex gap-2">
               {!image.isPrimary ? (
                 <Button

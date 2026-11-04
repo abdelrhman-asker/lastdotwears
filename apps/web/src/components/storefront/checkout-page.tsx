@@ -33,6 +33,7 @@ export function CheckoutPage({
   const cart = useCart();
   const shipping = useShippingRates();
   const addresses = useAddresses(user.data?.role === 'CUSTOMER');
+  const isGuest = user.error instanceof ApiError && user.error.problem.status === 401;
 
   if (
     user.isPending ||
@@ -42,18 +43,13 @@ export function CheckoutPage({
   ) {
     return <CheckoutLoading />;
   }
-  if (user.isError) {
-    const unauthorized = user.error instanceof ApiError && user.error.problem.status === 401;
+  if (user.isError && !isGuest) {
     return (
       <CheckoutGate
-        title={unauthorized ? 'Sign in to continue.' : 'Your account could not be loaded.'}
-        detail={
-          unauthorized
-            ? 'Your guest shopping bag will be merged with your account after sign in.'
-            : errorMessage(user.error)
-        }
-        href="/login?next=/checkout"
-        action="Sign in"
+        title="Checkout is temporarily unavailable."
+        detail={errorMessage(user.error)}
+        href="/cart"
+        action="Return to bag"
       />
     );
   }
@@ -67,13 +63,13 @@ export function CheckoutPage({
       />
     );
   }
-  if (!user.data.isEmailVerified) {
+  if (user.data && user.data.role !== 'CUSTOMER') {
     return (
       <CheckoutGate
-        title="Verify your email before checkout."
-        detail="This protects your order and ensures payment and delivery updates reach you."
-        href="/resend-verification"
-        action="Send verification email"
+        title="Checkout is for customers."
+        detail="Sign out of the administrator account to place a guest order."
+        href="/cart"
+        action="Return to bag"
       />
     );
   }
@@ -90,7 +86,7 @@ export function CheckoutPage({
 
   return (
     <CheckoutForm
-      key={user.data.id}
+      key={user.data?.id ?? 'guest'}
       user={user.data}
       cart={cart.data}
       shippingRates={shipping.data ?? []}
@@ -109,7 +105,7 @@ function CheckoutForm({
   cashOnDeliveryEnabled,
   instaPayEnabled,
 }: {
-  user: User;
+  user: User | undefined;
   cart: Cart;
   shippingRates: ShippingRate[];
   addresses: Address[];
@@ -129,10 +125,10 @@ function CheckoutForm({
   const form = useForm<CheckoutFormInput>({
     resolver: zodResolver(checkoutSchema),
     defaultValues: {
-      customerFirstName: preferredAddress?.recipientFirstName ?? user.firstName,
-      customerLastName: preferredAddress?.recipientLastName ?? user.lastName,
-      customerEmail: user.email,
-      customerPhone: preferredAddress?.phone ?? user.phone ?? '',
+      customerFirstName: preferredAddress?.recipientFirstName ?? user?.firstName ?? '',
+      customerLastName: preferredAddress?.recipientLastName ?? user?.lastName ?? '',
+      customerEmail: user?.email ?? '',
+      customerPhone: preferredAddress?.phone ?? user?.phone ?? '',
       governorateCode: defaultRate?.governorateCode ?? '',
       shippingCity: preferredAddress?.city ?? '',
       shippingAddressLine1: preferredAddress?.addressLine1 ?? '',
@@ -276,14 +272,14 @@ function CheckoutForm({
                   </Link>
                 </div>
               </div>
-            ) : (
+            ) : user ? (
               <p className="mt-5 text-xs text-stone-500">
                 <Link className="underline" href="/account/addresses">
                   Save an address
                 </Link>{' '}
                 for a faster future checkout.
               </p>
-            )}
+            ) : null}
             <div className="mt-6 grid gap-5 sm:grid-cols-2">
               <Field
                 error={form.formState.errors.governorateCode?.message}
@@ -380,7 +376,7 @@ function CheckoutForm({
               {instaPayEnabled ? (
                 <PaymentOption
                   checked={form.watch('paymentMethod') === 'INSTAPAY'}
-                  description="Place the order, then transfer using the displayed QR code or InstaPay ID."
+                  description="Continue to the QR, transfer the total, then upload your receipt to submit the order."
                   label="InstaPay — manual"
                   value="INSTAPAY"
                   register={form.register('paymentMethod')}
@@ -480,10 +476,14 @@ function CheckoutForm({
           ) : null}
           <Button
             className="mt-7 min-h-13 w-full text-xs tracking-[0.14em] uppercase"
-            disabled={!quote.data || quote.isPending || place.isPending}
+            disabled={quote.isPending || place.isPending}
             type="submit"
           >
-            {place.isPending ? 'Placing order…' : 'Place order'}
+            {place.isPending
+              ? 'Preparing order…'
+              : form.watch('paymentMethod') === 'INSTAPAY'
+                ? 'Continue to InstaPay'
+                : 'Place order'}
           </Button>
           <p className="mt-4 text-center text-[11px] leading-5 text-stone-500">
             Prices and stock are verified once more when the order is placed.

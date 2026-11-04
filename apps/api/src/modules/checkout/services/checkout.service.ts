@@ -8,6 +8,7 @@ import { OrdersService } from '../../orders/services/orders.service.js';
 import type { ShopperOwner } from '../../shopper/interfaces/shopper-owner.interface.js';
 import { SettingsService } from '../../settings/services/settings.service.js';
 import { MAIL_SERVICE, type MailService } from '../../mail/interfaces/mail-service.interface.js';
+import { mailErrorDetails } from '../../mail/utils/mail-error.util.js';
 import type { CheckoutQuoteDto, PlaceOrderDto } from '../dto/checkout.dto.js';
 import type { CheckoutQuoteResponseDto } from '../dto/checkout.dto.js';
 import {
@@ -29,14 +30,15 @@ export class CheckoutService {
   ) {}
 
   async quote(
-    user: AuthenticatedUser,
+    user: AuthenticatedUser | undefined,
     owner: ShopperOwner,
     input: CheckoutQuoteDto,
   ): Promise<CheckoutQuoteResponseDto> {
     this.assertCustomer(user);
+    this.assertOwner(owner);
     await this.prepareCart(owner);
     const result = await this.repository.quote(
-      user.id,
+      owner,
       input.governorateCode,
       input.couponCode || null,
     );
@@ -45,11 +47,12 @@ export class CheckoutService {
   }
 
   async place(
-    user: AuthenticatedUser,
+    user: AuthenticatedUser | undefined,
     owner: ShopperOwner,
     input: PlaceOrderDto,
   ): Promise<OrderResponseDto> {
     this.assertCustomer(user);
+    this.assertOwner(owner);
     const paymentSettings = await this.settingsService.paymentSettings();
     if (input.paymentMethod === 'CASH_ON_DELIVERY' && !paymentSettings.cashOnDeliveryEnabled) {
       throw new BadRequestException('Cash on delivery is temporarily unavailable.');
@@ -63,7 +66,7 @@ export class CheckoutService {
     if (cart.items.length > 0 && cart.hasUnavailableItems) {
       throw new ConflictException('Update unavailable shopping bag items before checkout.');
     }
-    const result = await this.repository.place(user.id, {
+    const result = await this.repository.place(owner, {
       idempotencyKey: input.idempotencyKey,
       couponCode: input.couponCode || null,
       governorateCode: input.governorateCode,
@@ -79,34 +82,37 @@ export class CheckoutService {
       deliveryNotes: input.deliveryNotes || null,
     });
     if (result.kind !== 'ok') this.throwFailure(result);
-    const response = await this.ordersService.toResponse(result.order);
     if (!result.idempotentReplay) {
-      await this.mailService
-        .sendOrderPlaced(
-          { email: result.order.customerEmail, firstName: result.order.customerFirstName },
-          {
-            orderNumber: result.order.orderNumber,
-            status: result.order.status,
-            totalPiasters: result.order.totalPiasters,
-            paymentMethod: result.order.paymentMethod,
-          },
-        )
-        .catch((error: unknown) =>
+      const mailOperations = [
+        this.mailService.sendNewOrderNotification(result.order).catch((error: unknown) =>
           this.logger.error(
-            `Order confirmation email failed for ${result.order.orderNumber}.`,
-            error,
+            `New order notification failed for ${result.order.orderNumber}: ${mailErrorDetails(error)}`,
+          ),
+        ),
+      ];
+      if (result.order.paymentMethod === 'CASH_ON_DELIVERY') {
+        mailOperations.push(
+          this.mailService.sendOrderReceivedEmail(result.order).catch((error: unknown) =>
+            this.logger.error(
+              `Order received email failed for ${result.order.orderNumber}: ${mailErrorDetails(error)}`,
+            ),
           ),
         );
+      }
+      await Promise.all(mailOperations);
     }
-    return response;
+    return this.ordersService.toResponse(result.order);
   }
 
-  private assertCustomer(user: AuthenticatedUser): void {
-    if (user.role !== 'CUSTOMER') {
+  private assertCustomer(user: AuthenticatedUser | undefined): void {
+    if (user && user.role !== 'CUSTOMER') {
       throw new BadRequestException('Checkout requires a customer account.');
     }
-    if (!user.isEmailVerified) {
-      throw new BadRequestException('Verify your email address before placing an order.');
+  }
+
+  private assertOwner(owner: ShopperOwner): void {
+    if (!owner.userId && !owner.guestTokenHash) {
+      throw new BadRequestException('Your shopping bag is empty.');
     }
   }
 

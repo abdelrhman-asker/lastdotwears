@@ -1,9 +1,31 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { createReadStream } from 'node:fs';
+
+import {
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Res,
+  StreamableFile,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import type { Response } from 'express';
 
 import { CurrentUser } from '../../../common/decorators/current-user.decorator.js';
 import { Roles } from '../../../common/decorators/roles.decorator.js';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface.js';
+import { PaymentProofImageFilePipe } from '../../uploads/pipes/payment-proof-image-file.pipe.js';
 import {
   ListCustomerOrdersQueryDto,
   OrderResponseDto,
@@ -26,6 +48,42 @@ export class OrdersController {
     @Query() query: ListCustomerOrdersQueryDto,
   ): Promise<PaginatedCustomerOrdersResponseDto> {
     return this.service.listCustomer(user.id, query);
+  }
+
+  @Post(':orderNumber/payment-proof')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 8_000_000, files: 1 } }))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiOperation({ summary: 'Submit an InstaPay transfer receipt for review' })
+  @ApiOkResponse({ type: OrderResponseDto })
+  submitPaymentProof(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('orderNumber') orderNumber: string,
+    @UploadedFile(PaymentProofImageFilePipe) file: Express.Multer.File,
+  ): Promise<OrderResponseDto> {
+    return this.service.submitInstaPayProof(user.id, orderNumber, file);
+  }
+
+  @Get(':orderNumber/payment-proof')
+  @ApiOperation({ summary: 'View the current customer’s submitted transfer receipt' })
+  async paymentProof(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('orderNumber') orderNumber: string,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<StreamableFile> {
+    const image = await this.service.customerPaymentProof(user.id, orderNumber);
+    response.set({
+      'Cache-Control': 'private, no-store',
+      'Content-Length': String(image.bytes),
+      'Content-Type': image.contentType,
+    });
+    return new StreamableFile(createReadStream(image.path));
   }
 
   @Get(':orderNumber')

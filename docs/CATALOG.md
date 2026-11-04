@@ -1,6 +1,6 @@
 # Catalog and inventory module
 
-Module 3 implements the catalog write model, public catalog API, Cloudinary-backed image
+Module 3 implements the catalog write model, public catalog API, server-backed image
 storage, inventory ledger, seed catalog, and the matching administrator interface.
 
 ## Data model
@@ -13,7 +13,7 @@ storage, inventory ledger, seed catalog, and the matching administrator interfac
   new-arrival flags, variants, and images. Products use soft deletion.
 - `ProductVariant` is the sellable SKU. Its normalized size/color combination is unique within
   a product, SKU is globally unique, and stock cannot be negative. Variant deletion is soft.
-- `ProductImage` stores Cloudinary identifiers and immutable upload metadata. Exactly one image
+- `ProductImage` stores server-file identifiers and immutable upload metadata. Exactly one image
   is kept primary when a product has images; deleting or demoting the primary image promotes
   the next image.
 - `InventoryMovement` is an append-only stock ledger containing the signed change, resulting
@@ -67,21 +67,18 @@ negative stock is rejected.
 Set these API environment variables:
 
 ```dotenv
-CLOUDINARY_CLOUD_NAME=
-CLOUDINARY_API_KEY=
-CLOUDINARY_API_SECRET=
-CLOUDINARY_PRODUCT_FOLDER=egypt-fashion/products
+UPLOAD_ROOT=./uploads
 PRODUCT_IMAGE_MAX_BYTES=8000000
 ```
 
-The three credentials must either all be set or all be omitted during development and testing.
-Production startup requires all three. Without them the application remains usable locally, but
-an upload returns `503 Product image storage is not configured`.
+`UPLOAD_ROOT` is resolved from the API process working directory. Compose overrides it with
+`/app/uploads` and mounts the persistent `product_uploads` volume at that path.
 
 Uploads are server-side and accept a single JPEG, PNG, WebP, or AVIF file. Validation checks both
-the declared MIME type and file signature, and the configured size limit is capped at 20 MB.
-Cloudinary credentials never reach the browser. A failed database write after a successful upload
-triggers a compensating Cloudinary deletion. Deleting a stored image invalidates its CDN asset.
+the declared MIME type, file signature, and encoded image dimensions; the configured size limit
+is capped at 20 MB. A failed database write after a successful upload triggers a compensating file
+deletion. Stored files are served from immutable `/api/v1/uploads/...` URLs, and deleting an image
+removes its server file.
 
 ## Administrator routes
 
@@ -108,7 +105,7 @@ corepack pnpm --filter @commerce/api prisma:seed
 The idempotent seed creates three categories, two brands, five active sample products, eighteen
 variants, and their initial inventory ledger entries in addition to the Module 2 accounts. It
 intentionally does not reset stock on later runs, which preserves real inventory changes. Sample
-images are not seeded because Cloudinary public IDs belong to a specific deployment account.
+images are not seeded so each operator can upload deployment-specific catalog photography.
 
 ## Verification
 

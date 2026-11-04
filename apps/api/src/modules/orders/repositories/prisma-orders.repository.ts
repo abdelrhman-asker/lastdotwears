@@ -9,6 +9,7 @@ import type {
   PaymentStatus,
 } from '../interfaces/order.interface.js';
 import type { OrdersRepository } from '../interfaces/orders-repository.interface.js';
+import type { ShopperOwner } from '../../shopper/interfaces/shopper-owner.interface.js';
 
 const orderInclude = {
   items: { orderBy: { createdAt: 'asc' as const } },
@@ -104,6 +105,8 @@ export function mapOrder(order: OrderEntity): OrderRecord {
       method: order.payment.method,
       status: order.payment.status,
       amountPiasters: order.payment.amountPiasters,
+      proofImagePublicId: order.payment.proofImagePublicId,
+      proofSubmittedAt: order.payment.proofSubmittedAt,
       instaPayReference: order.payment.instaPayReference,
       confirmationNote: order.payment.confirmationNote,
       confirmedAt: order.payment.confirmedAt,
@@ -123,8 +126,12 @@ export class PrismaOrdersRepository implements OrdersRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findCustomerOrder(userId: string, orderNumber: string): Promise<OrderRecord | null> {
+    return this.findShopperOrder({ userId }, orderNumber);
+  }
+
+  async findShopperOrder(owner: ShopperOwner, orderNumber: string): Promise<OrderRecord | null> {
     const order = await this.prisma.order.findFirst({
-      where: { userId, orderNumber },
+      where: { ...this.ownerWhere(owner), orderNumber },
       include: orderInclude,
     });
     return order ? mapOrder(order) : null;
@@ -153,6 +160,49 @@ export class PrismaOrdersRepository implements OrdersRepository {
     return order ? mapOrder(order) : null;
   }
 
+  async submitInstaPayProof(
+    input: Parameters<OrdersRepository['submitInstaPayProof']>[0],
+  ): Promise<'conflict' | 'not_found' | OrderRecord> {
+    const result = await this.prisma.$transaction(async (transaction) => {
+      const order = await transaction.order.findFirst({
+        where: { ...this.ownerWhere(input.owner), orderNumber: input.orderNumber },
+        include: { payment: true },
+      });
+      if (!order) return 'not_found' as const;
+      if (
+        order.paymentMethod !== 'INSTAPAY' ||
+        order.status !== 'WAITING_FOR_PAYMENT' ||
+        order.paymentStatus !== 'WAITING_FOR_PAYMENT' ||
+        !order.payment ||
+        order.payment.proofSubmittedAt
+      ) {
+        return 'conflict' as const;
+      }
+
+      const updated = await transaction.payment.updateMany({
+        where: { orderId: order.id, proofSubmittedAt: null },
+        data: {
+          proofImagePublicId: input.proofImagePublicId,
+          proofSubmittedAt: input.submittedAt,
+        },
+      });
+      if (updated.count !== 1) return 'conflict' as const;
+
+      await transaction.orderStatusEvent.create({
+        data: {
+          orderId: order.id,
+          actorId: input.owner.userId ?? null,
+          fromStatus: 'WAITING_FOR_PAYMENT',
+          toStatus: 'WAITING_FOR_PAYMENT',
+          note: 'Customer submitted an InstaPay transfer receipt.',
+        },
+      });
+      return order.id;
+    });
+    if (result === 'not_found' || result === 'conflict') return result;
+    return (await this.findShopperOrder(input.owner, input.orderNumber)) ?? 'not_found';
+  }
+
   async listAdmin(input: Parameters<OrdersRepository['listAdmin']>[0]) {
     const where: Prisma.OrderWhereInput = {
       ...(input.status ? { status: input.status } : {}),
@@ -178,6 +228,12 @@ export class PrismaOrdersRepository implements OrdersRepository {
       this.prisma.order.count({ where }),
     ]);
     return { items: items.map(mapOrder), total };
+  }
+
+  private ownerWhere(owner: ShopperOwner): { userId: string } | { guestTokenHash: string } {
+    if (owner.userId) return { userId: owner.userId };
+    if (owner.guestTokenHash) return { guestTokenHash: owner.guestTokenHash };
+    throw new Error('An order owner is required.');
   }
 
   async transition(
@@ -263,12 +319,16 @@ export class PrismaOrdersRepository implements OrdersRepository {
     try {
       const result = await this.prisma.$transaction(
         async (transaction) => {
-          const order = await transaction.order.findUnique({ where: { id: input.orderId } });
+          const order = await transaction.order.findUnique({
+            where: { id: input.orderId },
+            include: { payment: true },
+          });
           if (!order) return 'not_found' as const;
           if (
             order.paymentMethod !== 'INSTAPAY' ||
             order.status !== 'WAITING_FOR_PAYMENT' ||
-            order.paymentStatus !== 'WAITING_FOR_PAYMENT'
+            order.paymentStatus !== 'WAITING_FOR_PAYMENT' ||
+            !order.payment?.proofSubmittedAt
           ) {
             return 'conflict' as const;
           }

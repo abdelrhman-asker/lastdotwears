@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 
 import { MAIL_SERVICE, type MailService } from '../../mail/interfaces/mail-service.interface.js';
+import { mailErrorDetails } from '../../mail/utils/mail-error.util.js';
 import { SettingsService } from '../../settings/services/settings.service.js';
 import type {
   AdminContactListQueryDto,
@@ -36,7 +37,7 @@ export class ContactService {
     });
     const website = await this.settings.paymentSettings();
     const firstName = input.name.split(/\s+/)[0] || input.name;
-    await Promise.allSettled([
+    void Promise.allSettled([
       this.mail.sendContactAcknowledgement({ email: input.email, firstName }, input.subject),
       this.mail.sendContactNotification(website.contactEmail, {
         name: input.name,
@@ -46,8 +47,14 @@ export class ContactService {
         body: input.message,
       }),
     ]).then((results) => {
-      if (results.some((result) => result.status === 'rejected')) {
-        this.logger.error(`Contact email notification failed for message ${saved.id}.`);
+      const failures = results.filter(
+        (result): result is PromiseRejectedResult => result.status === 'rejected',
+      );
+      if (failures.length > 0) {
+        const details = failures.map((failure) => mailErrorDetails(failure.reason)).join('; ');
+        this.logger.error(
+          `Contact email delivery failed for message ${saved.id} (${failures.length}/2): ${details}`,
+        );
       }
     });
     return { id: saved.id, message: 'Your message has been received.' };

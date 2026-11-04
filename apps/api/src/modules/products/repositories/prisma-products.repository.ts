@@ -11,6 +11,8 @@ import type {
   ProductCreateInput,
   ProductsRepository,
   ProductUpdateInput,
+  VariantConflicts,
+  VariantIdentity,
   VariantWriteInput,
 } from '../interfaces/products-repository.interface.js';
 import type {
@@ -47,6 +49,17 @@ function mapVariant(variant: PrismaProductVariant): ProductVariantRecord {
     position: variant.position,
     createdAt: variant.createdAt,
     updatedAt: variant.updatedAt,
+  };
+}
+
+function toVariantIdentity(variant: PrismaProductVariant): VariantIdentity {
+  return {
+    id: variant.id,
+    productId: variant.productId,
+    sku: variant.sku,
+    size: variant.size,
+    colorName: variant.colorName,
+    isDeleted: variant.deletedAt !== null,
   };
 }
 
@@ -329,6 +342,53 @@ export class PrismaProductsRepository implements ProductsRepository {
       where: { id: variantId, productId, deletedAt: null },
     });
     return variant ? mapVariant(variant) : null;
+  }
+
+  async findVariantConflicts(
+    productId: string,
+    sku: string,
+    combinationKey: string,
+  ): Promise<VariantConflicts> {
+    const bySku = await this.prisma.productVariant.findUnique({ where: { sku } });
+    const byCombination = await this.prisma.productVariant.findUnique({
+      where: { productId_combinationKey: { productId, combinationKey } },
+    });
+    return {
+      bySku: bySku ? toVariantIdentity(bySku) : null,
+      byCombination: byCombination ? toVariantIdentity(byCombination) : null,
+    };
+  }
+
+  async restoreVariant(
+    productId: string,
+    variantId: string,
+    input: VariantWriteInput,
+    actorId: string,
+  ): Promise<ProductVariantRecord | null> {
+    return this.prisma.$transaction(async (transaction) => {
+      const existing = await transaction.productVariant.findFirst({
+        where: { id: variantId, productId, deletedAt: { not: null } },
+      });
+      if (!existing) return null;
+      const variant = await transaction.productVariant.update({
+        where: { id: variantId },
+        data: { ...input, deletedAt: null },
+      });
+      const quantityDelta = input.stockQuantity - existing.stockQuantity;
+      if (quantityDelta !== 0) {
+        await transaction.inventoryMovement.create({
+          data: {
+            variantId,
+            actorId,
+            type: 'ADJUSTMENT',
+            quantityDelta,
+            quantityAfter: input.stockQuantity,
+            reason: 'Restored a previously removed variant',
+          },
+        });
+      }
+      return mapVariant(variant);
+    });
   }
 
   async updateVariant(

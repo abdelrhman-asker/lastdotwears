@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import type { Coupon, Prisma } from '../../../generated/prisma/client.js';
 import { PrismaService } from '../../../database/prisma/prisma.service.js';
 import { mapOrder } from '../../orders/repositories/prisma-orders.repository.js';
+import type { ShopperOwner } from '../../shopper/interfaces/shopper-owner.interface.js';
 import type { CheckoutRepository } from '../interfaces/checkout-repository.interface.js';
 import type {
   CheckoutFailure,
@@ -53,23 +54,23 @@ export class PrismaCheckoutRepository implements CheckoutRepository {
   ) {}
 
   quote(
-    userId: string,
+    owner: ShopperOwner,
     governorateCode: string,
     couponCode: string | null,
   ): Promise<CheckoutQuoteResult> {
     return this.prisma.$transaction(async (transaction) => {
       const cart = await transaction.cart.findUnique({
-        where: { userId },
+        where: this.ownerWhere(owner),
         include: checkoutCartInclude,
       });
       if (!cart?.items.length) return { kind: 'empty_cart' };
-      return this.calculate(transaction, userId, cart, governorateCode, couponCode);
+      return this.calculate(transaction, owner, cart, governorateCode, couponCode);
     });
   }
 
-  async place(userId: string, input: PlaceOrderInput): Promise<PlaceOrderResult> {
-    const existing = await this.prisma.order.findUnique({
-      where: { userId_idempotencyKey: { userId, idempotencyKey: input.idempotencyKey } },
+  async place(owner: ShopperOwner, input: PlaceOrderInput): Promise<PlaceOrderResult> {
+    const existing = await this.prisma.order.findFirst({
+      where: { ...this.ownerWhere(owner), idempotencyKey: input.idempotencyKey },
       include: placedOrderInclude,
     });
     if (existing) return { kind: 'ok', order: mapOrder(existing), idempotentReplay: true };
@@ -77,14 +78,14 @@ export class PrismaCheckoutRepository implements CheckoutRepository {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         return await this.prisma.$transaction(
-          (transaction) => this.placeTransaction(transaction, userId, input),
+          (transaction) => this.placeTransaction(transaction, owner, input),
           { isolationLevel: 'Serializable' },
         );
       } catch (error) {
         if (this.isTransactionConflict(error) && attempt < 2) continue;
         if (this.isUniqueConflict(error)) {
-          const replay = await this.prisma.order.findUnique({
-            where: { userId_idempotencyKey: { userId, idempotencyKey: input.idempotencyKey } },
+          const replay = await this.prisma.order.findFirst({
+            where: { ...this.ownerWhere(owner), idempotencyKey: input.idempotencyKey },
             include: placedOrderInclude,
           });
           if (replay) return { kind: 'ok', order: mapOrder(replay), idempotentReplay: true };
@@ -104,23 +105,23 @@ export class PrismaCheckoutRepository implements CheckoutRepository {
 
   private async placeTransaction(
     transaction: Transaction,
-    userId: string,
+    owner: ShopperOwner,
     input: PlaceOrderInput,
   ): Promise<PlaceOrderResult> {
-    const replay = await transaction.order.findUnique({
-      where: { userId_idempotencyKey: { userId, idempotencyKey: input.idempotencyKey } },
+    const replay = await transaction.order.findFirst({
+      where: { ...this.ownerWhere(owner), idempotencyKey: input.idempotencyKey },
       include: placedOrderInclude,
     });
     if (replay) return { kind: 'ok', order: mapOrder(replay), idempotentReplay: true };
 
     const cart = await transaction.cart.findUnique({
-      where: { userId },
+      where: this.ownerWhere(owner),
       include: checkoutCartInclude,
     });
     if (!cart?.items.length) return { kind: 'empty_cart' };
     const calculated = await this.calculate(
       transaction,
-      userId,
+      owner,
       cart,
       input.governorateCode,
       input.couponCode,
@@ -152,7 +153,8 @@ export class PrismaCheckoutRepository implements CheckoutRepository {
         orderNumber,
         invoiceNumber,
         idempotencyKey: input.idempotencyKey,
-        userId,
+        userId: owner.userId ?? null,
+        guestTokenHash: owner.guestTokenHash ?? null,
         couponId: coupon?.id ?? null,
         shippingRateId: shippingRate.id,
         status,
@@ -256,7 +258,13 @@ export class PrismaCheckoutRepository implements CheckoutRepository {
         throw new CheckoutCouponChangedError('Coupon usage limit was reached.');
       }
       await transaction.couponRedemption.create({
-        data: { couponId: coupon.id, userId, orderId, discountPiasters: quote.discountPiasters },
+        data: {
+          couponId: coupon.id,
+          userId: owner.userId ?? null,
+          guestTokenHash: owner.guestTokenHash ?? null,
+          orderId,
+          discountPiasters: quote.discountPiasters,
+        },
       });
     }
 
@@ -272,7 +280,7 @@ export class PrismaCheckoutRepository implements CheckoutRepository {
 
   private async calculate(
     database: Transaction,
-    userId: string,
+    owner: ShopperOwner,
     cart: CheckoutCart,
     governorateCode: string,
     couponCode: string | null,
@@ -313,7 +321,7 @@ export class PrismaCheckoutRepository implements CheckoutRepository {
     let appliedCode: string | null = null;
     if (couponCode) {
       const coupon = await database.coupon.findUnique({ where: { code: couponCode } });
-      const failure = await this.couponFailure(database, userId, coupon, subtotalPiasters);
+      const failure = await this.couponFailure(database, owner, coupon, subtotalPiasters);
       if (failure) return failure;
       if (!coupon) return { kind: 'coupon_invalid', detail: 'Coupon is not valid.' };
       discountPiasters = calculateDiscount(subtotalPiasters, coupon);
@@ -337,7 +345,7 @@ export class PrismaCheckoutRepository implements CheckoutRepository {
 
   private async couponFailure(
     database: Transaction,
-    userId: string,
+    owner: ShopperOwner,
     coupon: Coupon | null,
     subtotalPiasters: number,
   ): Promise<CheckoutFailure | null> {
@@ -357,7 +365,7 @@ export class PrismaCheckoutRepository implements CheckoutRepository {
       return { kind: 'coupon_invalid', detail: 'Cart subtotal does not meet the coupon minimum.' };
     }
     const customerUses = await database.couponRedemption.count({
-      where: { couponId: coupon.id, userId },
+      where: { couponId: coupon.id, ...this.ownerWhere(owner) },
     });
     if (customerUses >= coupon.perCustomerLimit) {
       return { kind: 'coupon_invalid', detail: 'Coupon customer usage limit has been reached.' };
@@ -372,6 +380,12 @@ export class PrismaCheckoutRepository implements CheckoutRepository {
       'code' in error &&
       (error as { code?: unknown }).code === 'P2034'
     );
+  }
+
+  private ownerWhere(owner: ShopperOwner): { userId: string } | { guestTokenHash: string } {
+    if (owner.userId) return { userId: owner.userId };
+    if (owner.guestTokenHash) return { guestTokenHash: owner.guestTokenHash };
+    throw new Error('A checkout owner is required.');
   }
 
   private isUniqueConflict(error: unknown): boolean {

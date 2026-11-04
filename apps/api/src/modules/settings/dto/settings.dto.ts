@@ -23,7 +23,7 @@ import type {
 
 const phonePattern = /^\+?[0-9 ()-]{7,20}$/;
 const internalOrHttpsUrl = /^(?:\/(?!\/)|https:\/\/)/i;
-const bundledOrCloudinaryImageUrl = /^(?:\/(?!\/)|https:\/\/res\.cloudinary\.com\/)/i;
+const rootRelativeOrHttpsImageUrl = /^(?:\/(?!\/)|https:\/\/)/i;
 
 function trim({ value }: { value: unknown }): unknown {
   return typeof value === 'string' ? value.trim() : value;
@@ -218,9 +218,9 @@ export class CreateHomepageBannerDto {
   @MaxLength(500)
   description?: string | null;
 
-  @ApiProperty({ description: 'HTTPS Cloudinary URL or a root-relative bundled asset.' })
+  @ApiProperty({ description: 'HTTPS image URL or a root-relative server asset.' })
   @Transform(trim)
-  @Matches(bundledOrCloudinaryImageUrl)
+  @Matches(rootRelativeOrHttpsImageUrl)
   @MaxLength(2048)
   imageUrl!: string;
 

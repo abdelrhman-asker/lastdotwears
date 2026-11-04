@@ -45,10 +45,10 @@ remain the second validation boundary.
 - The home and category-directory pages retain a useful branded shell if the API is temporarily
   unavailable. Dynamic listing/detail routes use the route error boundary instead of exposing raw
   errors.
-- Product media uses `next/image`, responsive `sizes`, AVIF/WebP negotiation, lazy loading below
-  the fold, and Cloudinary-only remote image rules. The primary hero is priority-loaded.
+- Product media uses `next/image`, responsive `sizes`, AVIF/WebP negotiation, and lazy loading
+  below the fold. The primary hero is priority-loaded.
 - Product cards and detail galleries use an explicit neutral missing-image state. They never emit
-  a broken image URL when a newly seeded product has not received deployment-specific Cloudinary
+  a broken image URL when a newly seeded product has not received deployment-specific
   images yet.
 
 ## SEO
@@ -78,7 +78,7 @@ high-quality source asset.
 Module 4 adds one public deployment value:
 
 ```dotenv
-NEXT_PUBLIC_CONTACT_EMAIL=care@cairoedit.com
+NEXT_PUBLIC_CONTACT_EMAIL=support@last-dot.com
 ```
 
 Replace the example with the store's monitored customer-care address. It remains the resilient

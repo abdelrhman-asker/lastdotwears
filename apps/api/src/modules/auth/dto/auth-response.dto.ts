@@ -7,6 +7,11 @@ export class AuthenticationResponseDto {
   user!: UserResponseDto;
 }
 
+export class CsrfTokenResponseDto {
+  @ApiProperty()
+  csrfToken!: string;
+}
+
 export class MessageResponseDto {
   @ApiProperty()
   message!: string;

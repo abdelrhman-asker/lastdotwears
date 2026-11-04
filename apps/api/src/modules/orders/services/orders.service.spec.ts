@@ -1,6 +1,7 @@
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface.js';
 import type { InstaPayService } from '../../payments/services/instapay.service.js';
 import type { MailService } from '../../mail/interfaces/mail-service.interface.js';
+import type { ImageStorage } from '../../uploads/interfaces/image-storage.interface.js';
 import type { OrderRecord } from '../interfaces/order.interface.js';
 import type { OrdersRepository } from '../interfaces/orders-repository.interface.js';
 import { OrdersService } from './orders.service.js';
@@ -46,9 +47,11 @@ function order(status: OrderRecord['status'] = 'PENDING'): OrderRecord {
     items: [],
     payment: {
       id: '2e87929f-063e-4a50-878d-e75b2840e62b',
-      method: 'CASH_ON_DELIVERY',
-      status: 'PENDING',
+      method: status === 'WAITING_FOR_PAYMENT' ? 'INSTAPAY' : 'CASH_ON_DELIVERY',
+      status: status === 'WAITING_FOR_PAYMENT' ? 'WAITING_FOR_PAYMENT' : 'PENDING',
       amountPiasters: 106_000,
+      proofImagePublicId: null,
+      proofSubmittedAt: null,
       instaPayReference: null,
       confirmationNote: null,
       confirmedAt: null,
@@ -58,7 +61,8 @@ function order(status: OrderRecord['status'] = 'PENDING'): OrderRecord {
 }
 
 describe('OrdersService', () => {
-  const mail = { sendOrderStatusUpdated: () => Promise.resolve() } as unknown as MailService;
+  const mail = { sendOrderConfirmedEmail: () => Promise.resolve() } as unknown as MailService;
+  const imageStorage = {} as ImageStorage;
   it('returns a customer-scoped paginated order history', async () => {
     const summary = {
       id: order().id,
@@ -78,7 +82,7 @@ describe('OrdersService', () => {
         return Promise.resolve({ items: [summary], total: 1 });
       },
     } as unknown as OrdersRepository;
-    const service = new OrdersService(repository, {} as InstaPayService, mail);
+    const service = new OrdersService(repository, {} as InstaPayService, mail, imageStorage);
 
     await expect(
       service.listCustomer(order().userId, { page: 1, limit: 12, status: 'DELIVERED' }),
@@ -91,6 +95,111 @@ describe('OrdersService', () => {
     });
   });
 
+  it('submits an InstaPay receipt once and triggers the received email afterward', async () => {
+    const current = order('WAITING_FOR_PAYMENT');
+    const submitted = {
+      ...current,
+      payment: {
+        ...current.payment,
+        proofImagePublicId: `payment-proofs/${current.userId}/receipt.png`,
+        proofSubmittedAt: new Date('2026-08-30T10:05:00Z'),
+      },
+    };
+    const emailedOrders: OrderRecord[] = [];
+    const emailedReceipts: Array<{ path: string; contentType: string } | undefined> = [];
+    const repository = {
+      findCustomerOrder: () => Promise.resolve(current),
+      submitInstaPayProof: () => Promise.resolve(submitted),
+    } as unknown as OrdersRepository;
+    const storage = {
+      uploadPaymentProof: () =>
+        Promise.resolve({
+          publicId: submitted.payment.proofImagePublicId,
+          secureUrl: '/unused',
+          width: 800,
+          height: 1200,
+          format: 'png',
+          bytes: 100,
+        }),
+      deleteImage: () => Promise.resolve(),
+      readImage: () =>
+        Promise.resolve({
+          path: 'D:/receipts/receipt.png',
+          contentType: 'image/png',
+          bytes: 100,
+        }),
+    } as unknown as ImageStorage;
+    const service = new OrdersService(
+      repository,
+      {
+        instructions: () =>
+          Promise.resolve({
+            instaPayId: 'store@instapay',
+            qrCodeDataUrl: 'data:image/png;base64,abc',
+            instructions: 'Transfer the total.',
+            amountPiasters: current.totalPiasters,
+            orderNumber: current.orderNumber,
+          }),
+      } as unknown as InstaPayService,
+      {
+        sendOrderReceivedEmail: (
+          emailedOrder: OrderRecord,
+          receipt?: { path: string; contentType: string },
+        ) => {
+          emailedOrders.push(emailedOrder);
+          emailedReceipts.push(receipt);
+          return Promise.resolve();
+        },
+      } as unknown as MailService,
+      storage,
+    );
+
+    const response = await service.submitInstaPayProof(current.userId, current.orderNumber, {
+      buffer: Buffer.from('receipt'),
+    } as Express.Multer.File);
+    expect(response).toMatchObject({
+      orderNumber: current.orderNumber,
+      payment: { proofSubmittedAt: submitted.payment.proofSubmittedAt },
+    });
+    expect(response.payment).not.toHaveProperty('proofImagePublicId');
+    expect(emailedOrders).toEqual([submitted]);
+    expect(emailedReceipts).toEqual([
+      { path: 'D:/receipts/receipt.png', contentType: 'image/png', bytes: 100 },
+    ]);
+  });
+
+  it('removes a newly uploaded receipt when proof persistence conflicts', async () => {
+    const current = order('WAITING_FOR_PAYMENT');
+    const deleted: string[] = [];
+    const repository = {
+      findCustomerOrder: () => Promise.resolve(current),
+      submitInstaPayProof: () => Promise.resolve('conflict' as const),
+    } as unknown as OrdersRepository;
+    const storage = {
+      uploadPaymentProof: () =>
+        Promise.resolve({
+          publicId: 'payment-proofs/customer/receipt.png',
+          secureUrl: '/unused',
+          width: 800,
+          height: 1200,
+          format: 'png',
+          bytes: 100,
+        }),
+      deleteImage: (publicId: string) => {
+        deleted.push(publicId);
+        return Promise.resolve();
+      },
+    } as unknown as ImageStorage;
+    const service = new OrdersService(repository, {} as InstaPayService, mail, storage);
+
+    await expect(
+      service.submitInstaPayProof(current.userId, current.orderNumber, {
+        buffer: Buffer.from('receipt'),
+      } as Express.Multer.File),
+    ).rejects.toThrow('already submitted or the order changed');
+    expect(deleted).toEqual(['payment-proofs/customer/receipt.png']);
+  });
+
   it('enforces the order transition policy before persistence', async () => {
     let transitioned = false;
     const repository = {
@@ -100,7 +209,7 @@ describe('OrdersService', () => {
         return Promise.resolve('conflict' as const);
       },
     } as unknown as OrdersRepository;
-    const service = new OrdersService(repository, {} as InstaPayService, mail);
+    const service = new OrdersService(repository, {} as InstaPayService, mail, imageStorage);
 
     await expect(service.transition(actor, order().id, { status: 'PROCESSING' })).rejects.toThrow(
       'cannot move',
@@ -108,17 +217,30 @@ describe('OrdersService', () => {
     expect(transitioned).toBe(false);
   });
 
-  it('passes an allowed transition with its optimistic expected state', async () => {
+  it('sends one confirmation email after a pending order becomes processing', async () => {
     const current = order('PENDING');
+    const confirmed = { ...current, status: 'PROCESSING' as const };
+    const emailedOrders: OrderRecord[] = [];
+    const sendOrderConfirmedEmail = (emailedOrder: OrderRecord) => {
+      emailedOrders.push(emailedOrder);
+      return Promise.resolve();
+    };
     let received: Parameters<OrdersRepository['transition']>[0] | null = null;
     const repository = {
       findAdminOrder: () => Promise.resolve(current),
       transition: (input: Parameters<OrdersRepository['transition']>[0]) => {
         received = input;
-        return Promise.resolve({ ...current, status: 'PROCESSING' as const });
+        return Promise.resolve(confirmed);
       },
     } as unknown as OrdersRepository;
-    const service = new OrdersService(repository, {} as InstaPayService, mail);
+    const service = new OrdersService(
+      repository,
+      {} as InstaPayService,
+      {
+        sendOrderConfirmedEmail,
+      } as unknown as MailService,
+      imageStorage,
+    );
 
     await service.transition(actor, current.id, { status: 'PROCESSING', note: 'Packed' });
     expect(received).toMatchObject({
@@ -126,13 +248,91 @@ describe('OrdersService', () => {
       status: 'PROCESSING',
       note: 'Packed',
     });
+    expect(emailedOrders).toEqual([confirmed]);
+  });
+
+  it('does not resend confirmation when an already confirmed order is updated', async () => {
+    const current = order('PROCESSING');
+    const shipped = { ...current, status: 'SHIPPED' as const };
+    let emailCalls = 0;
+    const sendOrderConfirmedEmail = () => {
+      emailCalls += 1;
+      return Promise.resolve();
+    };
+    const repository = {
+      findAdminOrder: () => Promise.resolve(current),
+      transition: () => Promise.resolve(shipped),
+    } as unknown as OrdersRepository;
+    const service = new OrdersService(
+      repository,
+      {} as InstaPayService,
+      {
+        sendOrderConfirmedEmail,
+      } as unknown as MailService,
+      imageStorage,
+    );
+
+    await expect(
+      service.transition(actor, current.id, { status: 'SHIPPED' }),
+    ).resolves.toMatchObject({ status: 'SHIPPED' });
+    expect(emailCalls).toBe(0);
+  });
+
+  it('sends confirmation for the explicit InstaPay confirmation transition', async () => {
+    const current = order('WAITING_FOR_PAYMENT');
+    const confirmed = {
+      ...current,
+      status: 'PAID' as const,
+      paymentStatus: 'PAID' as const,
+      payment: { ...current.payment, status: 'PAID' as const, confirmedAt: new Date() },
+    };
+    const emailedOrders: OrderRecord[] = [];
+    const sendOrderConfirmedEmail = (emailedOrder: OrderRecord) => {
+      emailedOrders.push(emailedOrder);
+      return Promise.resolve();
+    };
+    const repository = {
+      confirmInstaPay: () => Promise.resolve(confirmed),
+    } as unknown as OrdersRepository;
+    const service = new OrdersService(
+      repository,
+      {} as InstaPayService,
+      {
+        sendOrderConfirmedEmail,
+      } as unknown as MailService,
+      imageStorage,
+    );
+
+    await service.confirmInstaPay(actor, current.id, { reference: 'TRANSFER-123' });
+    expect(emailedOrders).toEqual([confirmed]);
+  });
+
+  it('keeps the admin confirmation successful when the email provider fails', async () => {
+    const current = order('PENDING');
+    const confirmed = { ...current, status: 'PROCESSING' as const };
+    const repository = {
+      findAdminOrder: () => Promise.resolve(current),
+      transition: () => Promise.resolve(confirmed),
+    } as unknown as OrdersRepository;
+    const service = new OrdersService(
+      repository,
+      {} as InstaPayService,
+      {
+        sendOrderConfirmedEmail: () => Promise.reject(new Error('SMTP unavailable')),
+      } as unknown as MailService,
+      imageStorage,
+    );
+
+    await expect(
+      service.transition(actor, current.id, { status: 'PROCESSING' }),
+    ).resolves.toMatchObject({ status: 'PROCESSING' });
   });
 
   it('maps invalid InstaPay confirmation state to a conflict', async () => {
     const repository = {
       confirmInstaPay: () => Promise.resolve('conflict' as const),
     } as unknown as OrdersRepository;
-    const service = new OrdersService(repository, {} as InstaPayService, mail);
+    const service = new OrdersService(repository, {} as InstaPayService, mail, imageStorage);
 
     await expect(service.confirmInstaPay(actor, order().id, {})).rejects.toThrow(
       'Only a waiting InstaPay order',

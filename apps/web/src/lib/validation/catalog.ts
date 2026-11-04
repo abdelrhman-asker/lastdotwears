@@ -103,6 +103,16 @@ export const variantSchema = z.object({
 
 export type VariantFormInput = z.infer<typeof variantSchema>;
 
+export const variantEditSchema = variantSchema
+  .omit({ stockQuantity: true })
+  .extend({ isActive: z.boolean(), priceOverrideEgp: z.string().trim() })
+  .refine((values) => values.priceOverrideEgp === '' || Number(values.priceOverrideEgp) > 0, {
+    message: 'Enter a price above zero or leave this empty.',
+    path: ['priceOverrideEgp'],
+  });
+
+export type VariantEditFormInput = z.infer<typeof variantEditSchema>;
+
 export function egpToPiasters(value: string): number {
   return Math.round(Number(value) * 100);
 }

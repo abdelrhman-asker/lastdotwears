@@ -11,7 +11,7 @@ import {
   createSlug,
   normalizeSku,
 } from '../../../common/utils/catalog-normalization.util.js';
-import { hasPrismaCode } from '../../../common/utils/prisma-error.util.js';
+import { hasPrismaCode, prismaUniqueTarget } from '../../../common/utils/prisma-error.util.js';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface.js';
 import {
   IMAGE_STORAGE,
@@ -36,6 +36,7 @@ import {
 import {
   PRODUCTS_REPOSITORY,
   type ProductsRepository,
+  type VariantConflicts,
   type VariantWriteInput,
 } from '../interfaces/products-repository.interface.js';
 import type { ProductListQuery, ProductRecord } from '../interfaces/product.interface.js';
@@ -152,9 +153,23 @@ export class ProductsService {
     input: CreateProductVariantDto,
   ): Promise<ProductVariantResponseDto> {
     await this.requireProduct(productId);
+    const variant = this.variantInput(input);
+    const restoreId = this.resolveVariantConflicts(
+      await this.repository.findVariantConflicts(productId, variant.sku, variant.combinationKey),
+      productId,
+    );
     try {
+      if (restoreId) {
+        const restored = await this.repository.restoreVariant(
+          productId,
+          restoreId,
+          variant,
+          actor.id,
+        );
+        if (restored) return ProductVariantResponseDto.from(restored);
+      }
       return ProductVariantResponseDto.from(
-        await this.repository.createVariant(productId, this.variantInput(input), actor.id),
+        await this.repository.createVariant(productId, variant, actor.id),
       );
     } catch (error) {
       this.handleUniqueError(error);
@@ -338,8 +353,48 @@ export class ProductsService {
     }
   }
 
+  /**
+   * Removed variants stay in the table so order history keeps its references, but their SKU and
+   * size/color combination still occupy the unique indexes. Re-adding one restores that row
+   * instead of failing on a constraint the administrator cannot see.
+   */
+  private resolveVariantConflicts(conflicts: VariantConflicts, productId: string): string | null {
+    const { bySku, byCombination } = conflicts;
+    if (bySku && !bySku.isDeleted) {
+      throw new ConflictException(`SKU ${bySku.sku} already belongs to another variant.`);
+    }
+    if (byCombination && !byCombination.isDeleted) {
+      throw new ConflictException(
+        `This product already has a ${byCombination.size} / ${byCombination.colorName} variant.`,
+      );
+    }
+    if (bySku && bySku.productId !== productId) {
+      throw new ConflictException(
+        `SKU ${bySku.sku} belongs to a removed variant of another product. Choose a different SKU.`,
+      );
+    }
+    if (bySku && byCombination && bySku.id !== byCombination.id) {
+      throw new ConflictException(
+        `SKU ${bySku.sku} belongs to a different removed variant of this product. Choose another SKU to restore ${byCombination.size} / ${byCombination.colorName}.`,
+      );
+    }
+    return byCombination?.id ?? bySku?.id ?? null;
+  }
+
   private handleUniqueError(error: unknown): never {
     if (hasPrismaCode(error, 'P2002')) {
+      const target = prismaUniqueTarget(error).toLowerCase();
+      if (target.includes('combination')) {
+        throw new ConflictException(
+          'Another variant on this product already uses this size and color.',
+        );
+      }
+      if (target.includes('sku')) {
+        throw new ConflictException('This SKU already belongs to another variant.');
+      }
+      if (target.includes('slug')) {
+        throw new ConflictException('This product slug is already in use.');
+      }
       throw new ConflictException('Product slug, SKU, or size/color combination already exists.');
     }
     throw error;

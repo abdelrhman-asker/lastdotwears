@@ -10,7 +10,7 @@ const validEnvironment = {
   ONE_TIME_TOKEN_PEPPER: 'one-time-token-pepper-that-is-at-least-sixty-four-characters-tests',
   WEB_APP_URL: 'http://localhost:3000',
   MAIL_TRANSPORT: 'log',
-  MAIL_FROM_EMAIL: 'no-reply@example.com',
+  MAIL_FROM_EMAIL: 'support@last-dot.com',
   MAIL_FROM_NAME: 'Test Store',
 };
 
@@ -27,6 +27,7 @@ describe('validateEnvironment', () => {
       PORT: 4100,
       SWAGGER_ENABLED: false,
       CORS_ORIGINS: ['http://localhost:3000', 'https://shop.example.com'],
+      UPLOAD_ROOT: './uploads',
       RATE_LIMIT_LIMIT: 100,
     });
   });
@@ -58,31 +59,26 @@ describe('validateEnvironment', () => {
     ).toThrow('MAIL_TRANSPORT must be smtp in production');
   });
 
-  it('requires Cloudinary credentials in production', () => {
-    expect(() =>
-      validateEnvironment({
-        ...validEnvironment,
-        NODE_ENV: 'production',
-        MAIL_TRANSPORT: 'smtp',
-        SMTP_HOST: 'smtp.example.com',
-      }),
-    ).toThrow('Cloudinary credentials are required in production');
-  });
-
-  it('accepts complete production mail and image-storage configuration', () => {
+  it('accepts production mail and local image-storage configuration', () => {
     expect(
       validateEnvironment({
         ...validEnvironment,
         NODE_ENV: 'production',
         MAIL_TRANSPORT: 'smtp',
-        SMTP_HOST: 'smtp.example.com',
-        CLOUDINARY_CLOUD_NAME: 'store-cloud',
-        CLOUDINARY_API_KEY: 'cloudinary-key',
-        CLOUDINARY_API_SECRET: 'cloudinary-secret',
+        EMAIL_FROM: 'Last Dot <orders@last-dot.com>',
+        SMTP_HOST: 'smtp.zoho.com',
+        SMTP_PORT: '465',
+        SMTP_SECURE: 'true',
+        SMTP_USER: 'orders@last-dot.com',
+        SMTP_PASSWORD: 'server-only-app-password',
+        UPLOAD_ROOT: '/app/uploads',
       }),
     ).toMatchObject({
       NODE_ENV: 'production',
-      CLOUDINARY_CLOUD_NAME: 'store-cloud',
+      EMAIL_FROM: 'Last Dot <orders@last-dot.com>',
+      SMTP_PORT: 465,
+      SMTP_SECURE: true,
+      UPLOAD_ROOT: '/app/uploads',
     });
   });
 });

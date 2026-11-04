@@ -63,8 +63,11 @@ services:
       NODE_ENV: production
       PORT: 4000
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
-      CORS_ORIGINS: https://${DOMAIN}
+      CORS_ORIGINS: https://${DOMAIN},https://www.last-dot.com,https://last-dot.com
       WEB_APP_URL: https://${DOMAIN}
+      UPLOAD_ROOT: /app/uploads
+    volumes:
+      - product_uploads:/app/uploads
     expose:
       - '4000'
     depends_on:
@@ -190,6 +193,7 @@ services:
 
 volumes:
   postgres_data:
+  product_uploads:
   certbot_webroot:
   letsencrypt:
   nginx_tls:

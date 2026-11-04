@@ -84,6 +84,7 @@ export interface Order {
     method: PaymentMethod;
     status: PaymentStatus;
     amountPiasters: number;
+    proofSubmittedAt: string | null;
     instaPayReference: string | null;
     confirmationNote: string | null;
     confirmedAt: string | null;

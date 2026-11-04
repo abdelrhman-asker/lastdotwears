@@ -89,6 +89,27 @@ describe('Health endpoints (e2e)', () => {
       });
   });
 
+  it('issues a readable CSRF cookie without caching the response', async () => {
+    const response = await request(httpServer).get('/api/v1/auth/csrf').expect(200);
+    const responseBody: unknown = response.body;
+    if (
+      typeof responseBody !== 'object' ||
+      responseBody === null ||
+      !('csrfToken' in responseBody) ||
+      typeof responseBody.csrfToken !== 'string'
+    ) {
+      throw new Error('Expected the CSRF endpoint to return a token.');
+    }
+    const { csrfToken } = responseBody;
+
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(csrfToken).toEqual(expect.stringMatching(/^[A-Za-z0-9_-]+$/u));
+    expect(response.headers['set-cookie']).toEqual(
+      expect.arrayContaining([expect.stringContaining(`csrf_token=${String(csrfToken)};`)]),
+    );
+    expect(response.body).toEqual({ csrfToken });
+  });
+
   it('rejects login CSRF when an existing cookie session has no CSRF proof', async () => {
     await request(httpServer)
       .post('/api/v1/auth/login')
@@ -101,6 +122,24 @@ describe('Health endpoints (e2e)', () => {
           detail: 'The CSRF token is missing or invalid.',
         });
       });
+  });
+
+  it('accepts an unsafe request from a configured same-site browser origin', async () => {
+    await request(httpServer)
+      .delete('/api/v1/cart/items/00000000-0000-4000-8000-000000000000')
+      .set('Cookie', ['access_token=existing-session'])
+      .set('Origin', 'http://localhost:3000')
+      .set('Sec-Fetch-Site', 'same-origin')
+      .expect(401);
+  });
+
+  it('rejects an unsafe request from an untrusted browser origin without CSRF proof', async () => {
+    await request(httpServer)
+      .delete('/api/v1/cart/items/00000000-0000-4000-8000-000000000000')
+      .set('Cookie', ['access_token=existing-session'])
+      .set('Origin', 'https://attacker.example')
+      .set('Sec-Fetch-Site', 'cross-site')
+      .expect(403);
   });
 
   it('protects catalog administration routes', async () => {

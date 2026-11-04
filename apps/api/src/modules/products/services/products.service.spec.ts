@@ -5,6 +5,9 @@ import type {
   ProductCreateInput,
   ProductUpdateInput,
   ProductsRepository,
+  VariantConflicts,
+  VariantIdentity,
+  VariantWriteInput,
 } from '../interfaces/products-repository.interface.js';
 import type { ProductRecord } from '../interfaces/product.interface.js';
 import { ProductsService } from './products.service.js';
@@ -168,5 +171,133 @@ describe('ProductsService', () => {
     await service.update(existing.id, { salePricePiasters: null });
 
     expect(update).toEqual({ salePricePiasters: null, sortPricePiasters: input.pricePiasters });
+  });
+});
+
+describe('ProductsService variant conflicts', () => {
+  const productId = '9c486f70-f210-48e4-8483-07a7ec45482d';
+  const removedVariantId = '5f2b1f4e-6b3a-4c1d-9f0e-2a7c8d9e0b11';
+
+  const removed: VariantIdentity = {
+    id: removedVariantId,
+    productId,
+    sku: 'SHIRT-BLK-M',
+    size: 'M',
+    colorName: 'Black',
+    isDeleted: true,
+  };
+
+  const newVariant = {
+    sku: 'shirt-blk-m',
+    size: 'M',
+    colorName: 'Black',
+    colorHex: '#111111',
+    stockQuantity: 4,
+  };
+
+  function variantFixture(conflicts: VariantConflicts) {
+    const calls: {
+      created: number;
+      restored: VariantWriteInput | null;
+      restoredId: string | null;
+    } = { created: 0, restored: null, restoredId: null };
+    const repository = {
+      findById: () => Promise.resolve({ id: productId, status: 'ACTIVE' } as ProductRecord),
+      findVariantConflicts: () => Promise.resolve(conflicts),
+      restoreVariant: (_productId: string, variantId: string, value: VariantWriteInput) => {
+        calls.restored = value;
+        calls.restoredId = variantId;
+        return Promise.resolve({
+          id: variantId,
+          productId,
+          sku: value.sku,
+          size: value.size,
+          colorName: value.colorName,
+          colorHex: value.colorHex,
+          priceOverridePiasters: value.priceOverridePiasters,
+          stockQuantity: value.stockQuantity,
+          lowStockThreshold: value.lowStockThreshold,
+          isActive: value.isActive,
+          position: value.position,
+          createdAt: new Date('2026-08-02T00:00:00Z'),
+          updatedAt: new Date('2026-08-18T00:00:00Z'),
+        });
+      },
+      createVariant: () => {
+        calls.created += 1;
+        return Promise.reject(new Error('createVariant should not run'));
+      },
+    } as unknown as ProductsRepository;
+    return { calls, service: new ProductsService(repository, {} as ImageStorage) };
+  }
+
+  it('restores a removed variant instead of failing on the unique index', async () => {
+    const { calls, service } = variantFixture({ bySku: removed, byCombination: removed });
+
+    const variant = await service.createVariant(actor, productId, newVariant);
+
+    expect(calls.created).toBe(0);
+    expect(calls.restoredId).toBe(removedVariantId);
+    expect(calls.restored).toMatchObject({
+      sku: 'SHIRT-BLK-M',
+      combinationKey: 'm::black',
+      stockQuantity: 4,
+      isActive: true,
+    });
+    expect(variant.id).toBe(removedVariantId);
+    expect(variant.isActive).toBe(true);
+  });
+
+  it('restores by size and color when the administrator supplies a fresh SKU', async () => {
+    const { calls, service } = variantFixture({ bySku: null, byCombination: removed });
+
+    await service.createVariant(actor, productId, { ...newVariant, sku: 'SHIRT-BLK-M-V2' });
+
+    expect(calls.restoredId).toBe(removedVariantId);
+    expect(calls.restored).toMatchObject({ sku: 'SHIRT-BLK-M-V2' });
+  });
+
+  it('rejects a SKU that a live variant still owns', async () => {
+    const { service } = variantFixture({
+      bySku: { ...removed, id: 'other', isDeleted: false },
+      byCombination: null,
+    });
+
+    await expect(service.createVariant(actor, productId, newVariant)).rejects.toThrow(
+      'SKU SHIRT-BLK-M already belongs to another variant.',
+    );
+  });
+
+  it('rejects a live size and color combination', async () => {
+    const { service } = variantFixture({
+      bySku: null,
+      byCombination: { ...removed, id: 'other', isDeleted: false },
+    });
+
+    await expect(service.createVariant(actor, productId, newVariant)).rejects.toThrow(
+      'This product already has a M / Black variant.',
+    );
+  });
+
+  it('rejects a removed SKU that belongs to another product', async () => {
+    const { service } = variantFixture({
+      bySku: { ...removed, productId: 'bfdb67f1-ae52-44b5-b69c-d37c56ae6977' },
+      byCombination: null,
+    });
+
+    await expect(service.createVariant(actor, productId, newVariant)).rejects.toThrow(
+      'belongs to a removed variant of another product',
+    );
+  });
+
+  it('rejects restoring when the SKU belongs to a different removed variant', async () => {
+    const { service } = variantFixture({
+      bySku: { ...removed, id: 'a-different-removed-row' },
+      byCombination: removed,
+    });
+
+    await expect(service.createVariant(actor, productId, newVariant)).rejects.toThrow(
+      'belongs to a different removed variant of this product',
+    );
   });
 });

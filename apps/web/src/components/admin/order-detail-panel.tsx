@@ -2,12 +2,17 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StatusMessage } from '@/components/ui/status-message';
-import { confirmAdminInstaPay, getAdminOrder, updateAdminOrderStatus } from '@/lib/api/admin';
+import {
+  confirmAdminInstaPay,
+  getAdminOrder,
+  getAdminPaymentProof,
+  updateAdminOrderStatus,
+} from '@/lib/api/admin';
 import { errorMessage } from '@/lib/api/http-client';
 import { formatEgp } from '@/lib/format/currency';
 import { nextOrderStatuses } from '@/lib/admin/order-transitions';
@@ -149,31 +154,49 @@ export function OrderDetailPanel({ id }: { id: string }) {
             <p className="mt-2 text-xs text-stone-500">{data.paymentMethod.replaceAll('_', ' ')}</p>
           </section>
           {data.paymentMethod === 'INSTAPAY' && data.status === 'WAITING_FOR_PAYMENT' ? (
-            <section className="border border-amber-300 bg-amber-50 p-6">
-              <h2 className="font-serif text-2xl">Confirm InstaPay</h2>
-              <Input
-                className="mt-5"
-                onChange={(e) => setReference(e.target.value)}
-                placeholder="Transfer reference"
-                value={reference}
-              />
-              <textarea
-                className="mt-3 min-h-20 w-full border border-stone-300 bg-white p-3 text-sm"
-                onChange={(e) => setPaymentNote(e.target.value)}
-                placeholder="Confirmation note"
-                value={paymentNote}
-              />
-              {confirm.error ? (
-                <p className="mt-3 text-xs text-red-700">{errorMessage(confirm.error)}</p>
-              ) : null}
-              <Button
-                className="mt-4 w-full"
-                disabled={confirm.isPending}
-                onClick={() => confirm.mutate()}
-              >
-                Confirm payment
-              </Button>
-            </section>
+            data.payment.proofSubmittedAt ? (
+              <section className="border border-amber-300 bg-amber-50 p-6">
+                <h2 className="font-serif text-2xl">Review InstaPay receipt</h2>
+                <p className="mt-2 text-xs text-stone-600">
+                  Submitted{' '}
+                  {new Intl.DateTimeFormat('en-EG', {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                  }).format(new Date(data.payment.proofSubmittedAt))}
+                </p>
+                <AdminPaymentProofImage id={data.id} orderNumber={data.orderNumber} />
+                <Input
+                  className="mt-5"
+                  onChange={(e) => setReference(e.target.value)}
+                  placeholder="Transfer reference"
+                  value={reference}
+                />
+                <textarea
+                  className="mt-3 min-h-20 w-full border border-stone-300 bg-white p-3 text-sm"
+                  onChange={(e) => setPaymentNote(e.target.value)}
+                  placeholder="Confirmation note"
+                  value={paymentNote}
+                />
+                {confirm.error ? (
+                  <p className="mt-3 text-xs text-red-700">{errorMessage(confirm.error)}</p>
+                ) : null}
+                <Button
+                  className="mt-4 w-full"
+                  disabled={confirm.isPending}
+                  onClick={() => confirm.mutate()}
+                >
+                  Confirm payment
+                </Button>
+              </section>
+            ) : (
+              <section className="border border-stone-300 bg-white p-6">
+                <h2 className="font-serif text-2xl">Waiting for receipt</h2>
+                <p className="mt-3 text-sm leading-6 text-stone-600">
+                  The customer has not submitted an InstaPay transfer image yet. Payment cannot be
+                  confirmed until the receipt is uploaded.
+                </p>
+              </section>
+            )
           ) : null}
           {available.length ? (
             <section className="border border-stone-200 bg-white p-6">
@@ -240,6 +263,48 @@ export function OrderDetailPanel({ id }: { id: string }) {
     </div>
   );
 }
+
+function AdminPaymentProofImage({ id, orderNumber }: { id: string; orderNumber: string }) {
+  const proof = useQuery({
+    queryKey: ['admin', 'orders', id, 'payment-proof'],
+    queryFn: () => getAdminPaymentProof(id),
+    retry: 1,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!proof.data) return;
+    const url = URL.createObjectURL(proof.data);
+    setImageUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [proof.data]);
+
+  if (proof.isError) {
+    return (
+      <div className="mt-5">
+        <StatusMessage tone="error">{errorMessage(proof.error)}</StatusMessage>
+      </div>
+    );
+  }
+  if (proof.isPending || !imageUrl) {
+    return (
+      <div
+        aria-label="Loading transfer receipt"
+        className="mt-5 h-48 w-full animate-pulse bg-amber-100"
+      />
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      alt={`Transfer receipt for order ${orderNumber}`}
+      className="mt-5 max-h-[520px] w-full border border-amber-200 bg-white object-contain"
+      src={imageUrl}
+    />
+  );
+}
+
 function Row({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
   return (
     <div

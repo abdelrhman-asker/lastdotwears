@@ -112,7 +112,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
           <span className="text-stone-800">{product.name}</span>
         </nav>
 
-        <div className="mt-7 grid gap-10 lg:grid-cols-[minmax(0,1.65fr)_minmax(340px,0.7fr)] lg:gap-14">
+        <div className="mt-7 grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(340px,1fr)] lg:gap-14">
           <ProductGallery product={product} />
 
           <aside className="lg:sticky lg:top-28 lg:self-start">

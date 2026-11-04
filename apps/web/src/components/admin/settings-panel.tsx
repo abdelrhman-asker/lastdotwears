@@ -472,7 +472,7 @@ function BannerEditor({
             onChange={(event) => set('imageUrl', event.target.value)}
           />
         </Label>
-        <Label text="Upload Cloudinary image">
+        <Label text="Upload image">
           <Input
             accept="image/jpeg,image/png,image/webp,image/avif"
             disabled={upload.isPending}

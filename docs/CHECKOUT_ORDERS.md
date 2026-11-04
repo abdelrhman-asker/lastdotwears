@@ -6,9 +6,10 @@ inventory changes, and printable customer invoices.
 
 ## Checkout boundaries
 
-Checkout requires an active, email-verified customer session. A guest cart cookie is merged into
-the authenticated cart before quoting or placement, so signing in does not lose the customer's
-selection. The API never trusts totals sent by the browser.
+Checkout is available to guests without registration or email verification. Guest orders are
+owned by the same secure, HTTP-only token used for the guest cart, while signed-in customer orders
+remain attached to the customer account. A guest cart is still merged when a customer signs in,
+and the API never trusts totals sent by the browser.
 
 `POST /api/v1/checkout/quote` recalculates:
 
@@ -22,9 +23,10 @@ selection. The API never trusts totals sent by the browser.
 It creates the order snapshots and payment, atomically decrements stock, appends inventory SALE
 movements, records coupon redemption, and clears the cart only after success.
 
-The required UUID `idempotencyKey` is unique per customer. Repeating a completed request returns
-the original order even after its cart has been cleared. Serializable transaction conflicts are
-retried up to three times; unresolved stock or pricing races return a conflict for customer review.
+The required UUID `idempotencyKey` is unique per customer or guest session. Repeating a completed
+request returns the original order even after its cart has been cleared. Serializable transaction
+conflicts are retried up to three times; unresolved stock or pricing races return a conflict for
+customer review.
 
 ## Money and snapshots
 
@@ -50,7 +52,10 @@ or gateway integration is present.
 
 InstaPay orders start at `WAITING_FOR_PAYMENT`. The order response displays the exact total,
 InstaPay ID, instructions, order-number reference, and a locally generated PNG QR data URL. The QR
-encodes the configured InstaPay value; no third-party QR service receives order information.
+encodes the configured InstaPay value; no third-party QR service receives order information. The
+storefront explicitly tells the customer to enter the order number in the transfer reason or note.
+After upload, the protected receipt is visible on the order page and is embedded in and attached to
+the order-received email.
 
 Only an authenticated administrator can call the confirmation endpoint. Confirmation records the
 administrator, timestamp, optional transfer reference/note, updates payment to `PAID`, and moves the
@@ -60,7 +65,7 @@ Configure:
 
 ```dotenv
 ORDER_NUMBER_PREFIX=LDW
-INSTAPAY_ID=lastdotwears@instapay
+INSTAPAY_ID=abdelrhman_asker@instapay
 INSTAPAY_QR_VALUE=
 INSTAPAY_INSTRUCTIONS=Transfer the exact order total, include your order number, then wait for confirmation.
 ```
@@ -111,7 +116,7 @@ All admin mutations require role authorization and the existing double-submit CS
 
 - `/checkout` — contact, Egyptian delivery address, coupon, live summary, and payment selection
 - `/orders/:orderNumber` — status, payment instructions, items, totals, and delivery snapshot
-- `/orders/:orderNumber/invoice` — authenticated printable invoice
+- `/orders/:orderNumber/invoice` — printable invoice for the owning customer or guest session
 
 These personal routes are `noindex`. Customer order lists, saved addresses, and checkout address
 prefill are documented in [`CUSTOMER_ACCOUNT.md`](CUSTOMER_ACCOUNT.md). Administrator order,
@@ -134,7 +139,7 @@ usage and product stock are never reset by later seed runs.
 ## Verification
 
 Automated coverage includes price precedence, percentage rounding/caps, fixed-discount bounds,
-email verification, unavailable-cart blocking, idempotent replay, transition policy, protected
+guest checkout, unavailable-cart blocking, idempotent replay, transition policy, protected
 routes, and frontend checkout validation. Acceptance also includes Prisma schema/migration checks,
 strict TypeScript, ESLint, optimized builds, Swagger inspection, and a database-backed lifecycle
 test through guest merge, quote, InstaPay QR, idempotency, confirmation, cancellation, and stock

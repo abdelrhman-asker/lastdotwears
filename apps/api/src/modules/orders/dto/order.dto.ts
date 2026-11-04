@@ -5,7 +5,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { InstaPayInstructionsDto } from '../../payments/dto/instapay.dto.js';
 import type {
   OrderItemRecord,
-  OrderPaymentRecord,
   OrderRecord,
   OrderStatus,
   OrderStatusEventRecord,
@@ -50,11 +49,12 @@ export class OrderItemResponseDto implements OrderItemRecord {
   @ApiProperty() lineTotalPiasters!: number;
 }
 
-export class OrderPaymentResponseDto implements OrderPaymentRecord {
+export class OrderPaymentResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ enum: ['CASH_ON_DELIVERY', 'INSTAPAY'] }) method!: 'CASH_ON_DELIVERY' | 'INSTAPAY';
   @ApiProperty({ enum: paymentStatuses }) status!: PaymentStatus;
   @ApiProperty() amountPiasters!: number;
+  @ApiPropertyOptional({ nullable: true, format: 'date-time' }) proofSubmittedAt!: Date | null;
   @ApiPropertyOptional({ nullable: true }) instaPayReference!: string | null;
   @ApiPropertyOptional({ nullable: true }) confirmationNote!: string | null;
   @ApiPropertyOptional({ nullable: true, format: 'date-time' }) confirmedAt!: Date | null;
@@ -103,7 +103,17 @@ export class OrderResponseDto {
   instaPayInstructions!: InstaPayInstructionsDto | null;
 
   static from(record: OrderRecord, instructions: InstaPayInstructionsDto | null): OrderResponseDto {
-    return { ...record, instaPayInstructions: instructions };
+    const payment: OrderPaymentResponseDto = {
+      id: record.payment.id,
+      method: record.payment.method,
+      status: record.payment.status,
+      amountPiasters: record.payment.amountPiasters,
+      proofSubmittedAt: record.payment.proofSubmittedAt,
+      instaPayReference: record.payment.instaPayReference,
+      confirmationNote: record.payment.confirmationNote,
+      confirmedAt: record.payment.confirmedAt,
+    };
+    return { ...record, payment, instaPayInstructions: instructions };
   }
 }
 

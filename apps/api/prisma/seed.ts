@@ -15,8 +15,8 @@ const seedEnvironmentSchema = z.object({
   SEED_CUSTOMER_EMAIL: z.email().transform((value) => value.toLowerCase()),
   SEED_CUSTOMER_PASSWORD: z.string().min(12).max(128).regex(strongPasswordPattern),
   MAIL_FROM_NAME: z.string().trim().min(2).default('Last-Dot Wears'),
-  MAIL_FROM_EMAIL: z.email().default('care@lastdotwears.com'),
-  INSTAPAY_ID: z.string().trim().min(3).default('lastdotwears@instapay'),
+  MAIL_FROM_EMAIL: z.email().default('support@last-dot.com'),
+  INSTAPAY_ID: z.string().trim().min(3).default('abdelrhman_asker@instapay'),
   INSTAPAY_QR_VALUE: z.string().trim().optional(),
   INSTAPAY_INSTRUCTIONS: z
     .string()

@@ -56,15 +56,14 @@ export const environmentSchema = z
     MAIL_TRANSPORT: z.enum(['log', 'smtp']).default('log'),
     MAIL_FROM_EMAIL: z.email(),
     MAIL_FROM_NAME: z.string().trim().min(1).max(120),
+    ORDER_NOTIFICATION_EMAIL: z.email().default('orders@last-dot.com'),
+    EMAIL_FROM: optionalNonEmptyString,
     SMTP_HOST: optionalNonEmptyString,
     SMTP_PORT: z.coerce.number().int().min(1).max(65_535).default(587),
     SMTP_SECURE: booleanFromString.default(false),
     SMTP_USER: optionalNonEmptyString,
     SMTP_PASSWORD: optionalNonEmptyString,
-    CLOUDINARY_CLOUD_NAME: optionalNonEmptyString,
-    CLOUDINARY_API_KEY: optionalNonEmptyString,
-    CLOUDINARY_API_SECRET: optionalNonEmptyString,
-    CLOUDINARY_PRODUCT_FOLDER: z.string().trim().min(1).default('egypt-fashion/products'),
+    UPLOAD_ROOT: z.string().trim().min(1).default('./uploads'),
     PRODUCT_IMAGE_MAX_BYTES: z.coerce
       .number()
       .int()
@@ -77,7 +76,7 @@ export const environmentSchema = z
       .trim()
       .regex(/^[A-Z0-9]{2,8}$/)
       .default('LDW'),
-    INSTAPAY_ID: z.string().trim().min(3).max(120).default('lastdotwears@instapay'),
+    INSTAPAY_ID: z.string().trim().min(3).max(120).default('abdelrhman_asker@instapay'),
     INSTAPAY_QR_VALUE: optionalNonEmptyString,
     INSTAPAY_INSTRUCTIONS: z
       .string()
@@ -114,30 +113,6 @@ export const environmentSchema = z
         code: 'custom',
         path: ['SMTP_PASSWORD'],
         message: 'SMTP_USER and SMTP_PASSWORD must be provided together.',
-      });
-    }
-
-    const cloudinaryValues = [
-      environment.CLOUDINARY_CLOUD_NAME,
-      environment.CLOUDINARY_API_KEY,
-      environment.CLOUDINARY_API_SECRET,
-    ];
-    const configuredCloudinaryValues = cloudinaryValues.filter(Boolean).length;
-    if (configuredCloudinaryValues > 0 && configuredCloudinaryValues < cloudinaryValues.length) {
-      context.addIssue({
-        code: 'custom',
-        path: ['CLOUDINARY_API_SECRET'],
-        message: 'All Cloudinary credentials must be provided together.',
-      });
-    }
-    if (
-      environment.NODE_ENV === 'production' &&
-      configuredCloudinaryValues !== cloudinaryValues.length
-    ) {
-      context.addIssue({
-        code: 'custom',
-        path: ['CLOUDINARY_CLOUD_NAME'],
-        message: 'Cloudinary credentials are required in production.',
       });
     }
   });

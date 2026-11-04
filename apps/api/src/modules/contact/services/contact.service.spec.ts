@@ -20,6 +20,28 @@ const saved: ContactMessageRecord = {
 };
 
 describe('ContactService', () => {
+  it('returns after persistence without waiting for email delivery', async () => {
+    const repository = { create: () => Promise.resolve(saved) } as unknown as ContactRepository;
+    const pendingMail = new Promise<void>(() => undefined);
+    const mail = {
+      sendContactAcknowledgement: () => pendingMail,
+      sendContactNotification: () => pendingMail,
+    } as unknown as MailService;
+    const settings = {
+      paymentSettings: () => Promise.resolve({ contactEmail: 'support@last-dot.com' }),
+    } as unknown as SettingsService;
+    const subject = new ContactService(repository, mail, settings);
+
+    await expect(
+      subject.submit({
+        name: saved.name,
+        email: saved.email,
+        subject: saved.subject,
+        message: saved.message,
+      }),
+    ).resolves.toEqual({ id: saved.id, message: 'Your message has been received.' });
+  });
+
   it('persists a message even if email delivery fails', async () => {
     const repository = { create: () => Promise.resolve(saved) } as unknown as ContactRepository;
     const mail = {
@@ -27,7 +49,7 @@ describe('ContactService', () => {
       sendContactNotification: () => Promise.reject(new Error('SMTP unavailable')),
     } as unknown as MailService;
     const settings = {
-      paymentSettings: () => Promise.resolve({ contactEmail: 'care@example.com' }),
+      paymentSettings: () => Promise.resolve({ contactEmail: 'support@last-dot.com' }),
     } as unknown as SettingsService;
     const subject = new ContactService(repository, mail, settings);
 

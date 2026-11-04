@@ -10,6 +10,7 @@ import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { StatusMessage } from '@/components/ui/status-message';
 import { commerceQueryKeys } from '@/hooks/use-commerce';
 import { currentUserQueryKey } from '@/hooks/use-current-user';
@@ -57,10 +58,9 @@ export function LoginForm({ admin = false, redirectTo }: LoginFormProps) {
         <Input autoComplete="email" id="email" type="email" {...form.register('email')} />
       </Field>
       <Field error={form.formState.errors.password?.message} htmlFor="password" label="Password">
-        <Input
+        <PasswordInput
           autoComplete="current-password"
           id="password"
-          type="password"
           {...form.register('password')}
         />
       </Field>

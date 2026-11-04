@@ -6,7 +6,8 @@ import { useEffect, useState } from 'react';
 
 import { CommerceHeaderActions } from './commerce-header-actions';
 import { CloseIcon, MenuIcon, SearchIcon, UserIcon } from './icons';
-
+import Logo from '../../../public/images/Logo.svg';
+import Image from 'next/image';
 const navigation = [
   { href: '/products', label: 'Shop' },
   { href: '/products?newArrival=true', label: 'New arrivals' },
@@ -43,7 +44,7 @@ export function ShopHeader({ storeName }: { storeName: string }) {
 
         <button
           type="button"
-          className="flex size-11 items-center justify-start lg:hidden"
+          className="flex size-8 lg:size-11 items-center justify-start lg:hidden"
           aria-expanded={open}
           aria-controls="mobile-navigation"
           aria-label={open ? 'Close menu' : 'Open menu'}
@@ -57,10 +58,11 @@ export function ShopHeader({ storeName }: { storeName: string }) {
           className="text-center text-[13px] font-semibold tracking-[0.3em] whitespace-nowrap uppercase"
           aria-label={`${storeName} home`}
         >
-          {storeName}
+          <Image src={Logo} alt="" width={150} height={80} />
+          {/* {storeName} */}
         </Link>
 
-        <div className="flex items-center justify-end gap-1 sm:gap-3">
+        <div className="flex items-center justify-end gap-0 sm:gap-3">
           <form
             action="/search"
             role="search"
@@ -88,14 +90,14 @@ export function ShopHeader({ storeName }: { storeName: string }) {
           <Link
             href="/search"
             aria-label="Search"
-            className="hidden size-11 place-items-center sm:grid xl:hidden"
+            className="hidden size-8 lg:size-11 place-items-center sm:grid xl:hidden"
           >
             <SearchIcon className="size-5" />
           </Link>
           <Link
             href="/account/profile"
             aria-label="Your account"
-            className="hidden size-11 place-items-center sm:grid"
+            className="hidden size-8 lg:size-11 place-items-center sm:grid"
           >
             <UserIcon className="size-5" />
           </Link>

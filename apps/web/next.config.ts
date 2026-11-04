@@ -32,19 +32,22 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   images: {
     formats: ['image/avif', 'image/webp'],
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'res.cloudinary.com',
-        pathname: '/**',
-      },
-    ],
   },
   async headers() {
     return [
       {
         source: '/:path*',
         headers: securityHeaders,
+      },
+    ];
+  },
+  async rewrites() {
+    const internalApiUrl = buildEnvironment.INTERNAL_API_URL.replace(/\/$/u, '');
+
+    return [
+      {
+        source: '/api/v1/:path*',
+        destination: `${internalApiUrl}/:path*`,
       },
     ];
   },

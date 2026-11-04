@@ -16,7 +16,7 @@ the database. Existing order totals and payment-method snapshots remain immutabl
 
 Social links are ordered, independently enabled records. Homepage banners contain accessible image
 text, CTA content, an ordering position, and optional UTC start/end times. Public reads return only
-active banners inside their schedule. Cloudinary uploads use the same signature, size, and content
+active banners inside their schedule. Server uploads use the same signature, size, and content
 validation as product imagery; root-relative bundled images remain supported for the seeded hero.
 
 ## Contact workflow
@@ -63,7 +63,7 @@ The shared announcement, contact page, footer identity/social links, checkout pa
 home hero read the public settings projection. Next.js retains a safe local fallback and revalidates
 server reads every five minutes, keeping builds useful during temporary API outages.
 
-The admin panel adds `/admin/settings` for store/payment, social, banner, schedule, and Cloudinary
+The admin panel adds `/admin/settings` for store/payment, social, banner, schedule, and image
 management, plus `/admin/messages` for customer-care triage. Admin routes remain `noindex,nofollow`.
 
 ## Migration and seed

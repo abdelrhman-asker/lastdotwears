@@ -4,11 +4,13 @@ import type {
   OrderSummaryRecord,
   PaymentStatus,
 } from './order.interface.js';
+import type { ShopperOwner } from '../../shopper/interfaces/shopper-owner.interface.js';
 
 export const ORDERS_REPOSITORY = Symbol('ORDERS_REPOSITORY');
 
 export interface OrdersRepository {
   findCustomerOrder(userId: string, orderNumber: string): Promise<OrderRecord | null>;
+  findShopperOrder(owner: ShopperOwner, orderNumber: string): Promise<OrderRecord | null>;
   listCustomer(input: {
     userId: string;
     page: number;
@@ -16,6 +18,12 @@ export interface OrdersRepository {
     status?: OrderStatus;
   }): Promise<{ items: OrderSummaryRecord[]; total: number }>;
   findAdminOrder(id: string): Promise<OrderRecord | null>;
+  submitInstaPayProof(input: {
+    owner: ShopperOwner;
+    orderNumber: string;
+    proofImagePublicId: string;
+    submittedAt: Date;
+  }): Promise<'conflict' | 'not_found' | OrderRecord>;
   listAdmin(input: {
     page: number;
     limit: number;

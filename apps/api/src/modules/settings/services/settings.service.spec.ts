@@ -9,7 +9,7 @@ const settings: WebsiteSettingsRecord = {
   id: 'store',
   storeName: 'Last-Dot Wears',
   tagline: 'Modern essentials.',
-  contactEmail: 'care@example.com',
+  contactEmail: 'support@last-dot.com',
   contactPhone: null,
   storeAddress: null,
   businessHours: 'Sunday-Thursday',
@@ -32,7 +32,7 @@ function service(repository: Partial<SettingsRepository>): SettingsService {
       getOrThrow: (key: string) =>
         ({
           MAIL_FROM_NAME: 'Last-Dot Wears',
-          MAIL_FROM_EMAIL: 'care@example.com',
+          MAIL_FROM_EMAIL: 'support@last-dot.com',
           INSTAPAY_ID: 'store@instapay',
           INSTAPAY_INSTRUCTIONS: 'Transfer the exact order total.',
         })[key],

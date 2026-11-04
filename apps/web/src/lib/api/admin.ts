@@ -1,4 +1,4 @@
-import { apiRequest } from '@/lib/api/http-client';
+import { apiBlobRequest, apiRequest } from '@/lib/api/http-client';
 import type {
   Coupon,
   CouponWriteInput,
@@ -40,6 +40,10 @@ export function listAdminOrders(input: {
 
 export function getAdminOrder(id: string): Promise<Order> {
   return apiRequest(`/admin/orders/${encodeURIComponent(id)}`);
+}
+
+export function getAdminPaymentProof(id: string): Promise<Blob> {
+  return apiBlobRequest(`/admin/orders/${encodeURIComponent(id)}/payment-proof`);
 }
 
 export function updateAdminOrderStatus(

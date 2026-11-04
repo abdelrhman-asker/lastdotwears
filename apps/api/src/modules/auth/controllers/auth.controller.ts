@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   Post,
   Req,
@@ -24,9 +25,14 @@ import {
   ResetPasswordDto,
   TokenRequestDto,
 } from '../dto/auth.dto.js';
-import { AuthenticationResponseDto, MessageResponseDto } from '../dto/auth-response.dto.js';
+import {
+  AuthenticationResponseDto,
+  CsrfTokenResponseDto,
+  MessageResponseDto,
+} from '../dto/auth-response.dto.js';
 import { AuthCookieService, REFRESH_TOKEN_COOKIE } from '../services/auth-cookie.service.js';
 import { AuthService } from '../services/auth.service.js';
+import { AuthTokenService } from '../services/auth-token.service.js';
 import { readCookie, requestMetadata } from '../utils/request.util.js';
 
 @ApiTags('Authentication')
@@ -35,7 +41,19 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly cookieService: AuthCookieService,
+    private readonly tokenService: AuthTokenService,
   ) {}
+
+  @Get('csrf')
+  @Public()
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: 'Issue a browser CSRF token' })
+  @ApiOkResponse({ type: CsrfTokenResponseDto })
+  issueCsrfToken(@Res({ passthrough: true }) response: Response): CsrfTokenResponseDto {
+    const csrfToken = this.tokenService.createCsrfToken();
+    this.cookieService.setCsrfCookie(response, csrfToken);
+    return { csrfToken };
+  }
 
   @Post('register')
   @Public()

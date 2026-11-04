@@ -13,9 +13,8 @@ process.env.ONE_TIME_TOKEN_PEPPER =
   'one-time-token-pepper-that-is-at-least-sixty-four-characters-tests';
 process.env.WEB_APP_URL = 'http://localhost:3000';
 process.env.MAIL_TRANSPORT = 'log';
-process.env.MAIL_FROM_EMAIL = 'no-reply@example.com';
+process.env.MAIL_FROM_EMAIL = 'support@last-dot.com';
 process.env.MAIL_FROM_NAME = 'Test Store';
-process.env.CLOUDINARY_PRODUCT_FOLDER = 'test/products';
 process.env.PRODUCT_IMAGE_MAX_BYTES = '8000000';
 process.env.SWAGGER_ENABLED = 'false';
 process.env.LOG_LEVEL = 'fatal';

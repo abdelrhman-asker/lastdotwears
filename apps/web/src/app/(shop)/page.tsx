@@ -1,16 +1,12 @@
 import type { Metadata } from 'next';
-import Image from 'next/image';
 import Link from 'next/link';
 
 import { CatalogUnavailable } from '@/components/storefront/catalog-unavailable';
+import { FashionHero } from '@/components/storefront/fashion-hero';
 import { ArrowIcon } from '@/components/storefront/icons';
 import { ProductGrid } from '@/components/storefront/product-grid';
 import { SectionHeading } from '@/components/storefront/section-heading';
-import {
-  defaultHomepageBanner,
-  getPublicWebsiteSettings,
-  safeHomeCatalog,
-} from '@/lib/api/storefront';
+import { getPublicWebsiteSettings, safeHomeCatalog } from '@/lib/api/storefront';
 
 export const metadata: Metadata = {
   alternates: { canonical: '/' },
@@ -18,55 +14,23 @@ export const metadata: Metadata = {
 
 export default async function HomePage() {
   const [catalog, settings] = await Promise.all([safeHomeCatalog(), getPublicWebsiteSettings()]);
-  const banner = settings.banners[0] ?? defaultHomepageBanner;
+  const railProducts = [...catalog.featured, ...catalog.newArrivals].filter(
+    (product, index, products) =>
+      products.findIndex((candidate) => candidate.id === product.id) === index,
+  );
+  const announcement =
+    settings.announcementEnabled && settings.announcementText
+      ? settings.announcementText
+      : 'Delivery across Egypt';
 
   return (
     <>
-      <section className="relative min-h-[690px] overflow-hidden bg-[#d9c3a5] sm:min-h-[760px] lg:min-h-[calc(100dvh-104px)]">
-        <Image
-          src={banner.imageUrl}
-          alt={banner.altText}
-          fill
-          priority
-          quality={90}
-          sizes="100vw"
-          className="object-cover object-[64%_center] sm:object-center"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-stone-950/35 via-transparent to-transparent sm:bg-gradient-to-r sm:from-[#e1c9a7]/90 sm:via-[#e1c9a7]/25 sm:to-transparent" />
-        <div className="relative mx-auto flex min-h-[690px] max-w-[1600px] items-end px-6 py-14 sm:min-h-[760px] sm:items-center sm:px-8 lg:min-h-[calc(100dvh-104px)] lg:px-12">
-          <div className="max-w-xl text-white sm:text-stone-950">
-            {banner.eyebrow ? (
-              <p className="text-[10px] tracking-[0.28em] uppercase">{banner.eyebrow}</p>
-            ) : null}
-            <h1 className="mt-5 font-serif text-[clamp(3.6rem,7vw,7.5rem)] leading-[0.86] tracking-[-0.055em]">
-              {banner.title}
-            </h1>
-            {banner.description ? (
-              <p className="mt-7 max-w-md text-sm leading-6 text-white/85 sm:text-stone-800">
-                {banner.description}
-              </p>
-            ) : null}
-            <div className="mt-9 flex flex-wrap gap-3">
-              <Link
-                href={banner.ctaUrl}
-                className="group inline-flex min-h-12 items-center gap-4 bg-stone-950 px-6 text-xs tracking-[0.14em] text-white uppercase"
-              >
-                {banner.ctaLabel}
-                <ArrowIcon className="size-4 transition-transform group-hover:translate-x-1" />
-              </Link>
-              <Link
-                href="/products"
-                className="inline-flex min-h-12 items-center border border-white/70 px-6 text-xs tracking-[0.14em] uppercase sm:border-stone-950"
-              >
-                View collection
-              </Link>
-            </div>
-          </div>
-        </div>
-        <p className="absolute right-5 bottom-5 hidden origin-bottom-right -rotate-90 text-[9px] tracking-[0.22em] text-stone-700 uppercase lg:block">
-          Cairo · Egypt
-        </p>
-      </section>
+      <FashionHero
+        products={railProducts}
+        storeName={settings.storeName}
+        announcement={announcement}
+        unavailable={catalog.unavailable}
+      />
 
       <section className="mx-auto max-w-[1600px] px-5 py-20 sm:px-8 lg:px-12 lg:py-28">
         <SectionHeading eyebrow="Explore" title="Shop by category" href="/categories" />

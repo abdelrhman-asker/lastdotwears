@@ -442,7 +442,8 @@ model Order {
   orderNumber             String             @unique @map("order_number") @db.VarChar(32)
   invoiceNumber           String             @unique @map("invoice_number") @db.VarChar(32)
   idempotencyKey          String             @map("idempotency_key") @db.Uuid
-  userId                  String             @map("user_id") @db.Uuid
+  userId                  String?            @map("user_id") @db.Uuid
+  guestTokenHash          String?            @map("guest_token_hash") @db.Char(64)
   couponId                String?            @map("coupon_id") @db.Uuid
   shippingRateId          String?            @map("shipping_rate_id") @db.Uuid
   status                  OrderStatus
@@ -467,7 +468,7 @@ model Order {
   placedAt                DateTime           @default(now()) @map("placed_at") @db.Timestamptz(3)
   createdAt               DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt               DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
-  user                    User               @relation("CustomerOrders", fields: [userId], references: [id], onDelete: Restrict)
+  user                    User?              @relation("CustomerOrders", fields: [userId], references: [id], onDelete: Restrict)
   coupon                  Coupon?            @relation(fields: [couponId], references: [id], onDelete: SetNull)
   shippingRate            ShippingRate?      @relation(fields: [shippingRateId], references: [id], onDelete: SetNull)
   items                   OrderItem[]
@@ -476,8 +477,10 @@ model Order {
   couponRedemption        CouponRedemption?
 
   @@unique([userId, idempotencyKey])
+  @@unique([guestTokenHash, idempotencyKey])
   @@index([createdAt])
   @@index([userId, createdAt])
+  @@index([guestTokenHash, createdAt])
   @@index([status, createdAt])
   @@index([paymentStatus, createdAt])
   @@map("orders")
@@ -510,19 +513,21 @@ model OrderItem {
 }
 
 model Payment {
-  id                String        @id @default(uuid()) @db.Uuid
-  orderId           String        @unique @map("order_id") @db.Uuid
-  method            PaymentMethod
-  status            PaymentStatus
-  amountPiasters    Int           @map("amount_piasters")
-  instaPayReference String?       @map("instapay_reference") @db.VarChar(120)
-  confirmationNote  String?       @map("confirmation_note") @db.VarChar(500)
-  confirmedById     String?       @map("confirmed_by_id") @db.Uuid
-  confirmedAt       DateTime?     @map("confirmed_at") @db.Timestamptz(3)
-  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt         DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
-  order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  confirmedBy       User?         @relation("PaymentConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
+  id                 String        @id @default(uuid()) @db.Uuid
+  orderId            String        @unique @map("order_id") @db.Uuid
+  method             PaymentMethod
+  status             PaymentStatus
+  amountPiasters     Int           @map("amount_piasters")
+  proofImagePublicId String?       @map("proof_image_public_id") @db.VarChar(255)
+  proofSubmittedAt   DateTime?     @map("proof_submitted_at") @db.Timestamptz(3)
+  instaPayReference  String?       @map("instapay_reference") @db.VarChar(120)
+  confirmationNote   String?       @map("confirmation_note") @db.VarChar(500)
+  confirmedById      String?       @map("confirmed_by_id") @db.Uuid
+  confirmedAt        DateTime?     @map("confirmed_at") @db.Timestamptz(3)
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  order              Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  confirmedBy        User?         @relation("PaymentConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
 
   @@index([status, createdAt])
   @@map("payments")
@@ -547,15 +552,17 @@ model OrderStatusEvent {
 model CouponRedemption {
   id               String   @id @default(uuid()) @db.Uuid
   couponId         String   @map("coupon_id") @db.Uuid
-  userId           String   @map("user_id") @db.Uuid
+  userId           String?  @map("user_id") @db.Uuid
+  guestTokenHash   String?  @map("guest_token_hash") @db.Char(64)
   orderId          String   @unique @map("order_id") @db.Uuid
   discountPiasters Int      @map("discount_piasters")
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   coupon           Coupon   @relation(fields: [couponId], references: [id], onDelete: Restrict)
-  user             User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user             User?    @relation(fields: [userId], references: [id], onDelete: Restrict)
   order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([couponId, userId, createdAt])
+  @@index([couponId, guestTokenHash, createdAt])
   @@index([userId, createdAt])
   @@map("coupon_redemptions")
 }

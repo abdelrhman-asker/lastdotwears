@@ -25,7 +25,11 @@ export class AuthCookieService {
       maxAge: this.configService.getOrThrow<number>('REFRESH_TOKEN_TTL_DAYS') * 24 * 60 * 60 * 1000,
       path: '/api/v1',
     });
-    response.cookie(CSRF_TOKEN_COOKIE, tokens.csrfToken, {
+    this.setCsrfCookie(response, tokens.csrfToken);
+  }
+
+  setCsrfCookie(response: Response, csrfToken: string): void {
+    response.cookie(CSRF_TOKEN_COOKIE, csrfToken, {
       ...this.baseOptions(),
       httpOnly: false,
       maxAge: this.configService.getOrThrow<number>('REFRESH_TOKEN_TTL_DAYS') * 24 * 60 * 60 * 1000,

@@ -8,8 +8,15 @@ import {
 } from '@nestjs/common';
 
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface.js';
+import type { ShopperOwner } from '../../shopper/interfaces/shopper-owner.interface.js';
 import { InstaPayService } from '../../payments/services/instapay.service.js';
 import { MAIL_SERVICE, type MailService } from '../../mail/interfaces/mail-service.interface.js';
+import { mailErrorDetails } from '../../mail/utils/mail-error.util.js';
+import {
+  IMAGE_STORAGE,
+  type ImageStorage,
+  type StoredImageFile,
+} from '../../uploads/interfaces/image-storage.interface.js';
 import type {
   ConfirmInstaPayDto,
   ListAdminOrdersQueryDto,
@@ -44,10 +51,18 @@ export class OrdersService {
     @Inject(ORDERS_REPOSITORY) private readonly repository: OrdersRepository,
     private readonly instaPay: InstaPayService,
     @Inject(MAIL_SERVICE) private readonly mailService: MailService,
+    @Inject(IMAGE_STORAGE) private readonly imageStorage: ImageStorage,
   ) {}
 
   async customerOrder(userId: string, orderNumber: string): Promise<OrderResponseDto> {
     const order = await this.repository.findCustomerOrder(userId, orderNumber);
+    if (!order) throw new NotFoundException('Order not found.');
+    return this.toResponse(order);
+  }
+
+  async shopperOrder(owner: ShopperOwner, orderNumber: string): Promise<OrderResponseDto> {
+    this.assertShopperOwner(owner);
+    const order = await this.repository.findShopperOrder(owner, orderNumber);
     if (!order) throw new NotFoundException('Order not found.');
     return this.toResponse(order);
   }
@@ -75,6 +90,99 @@ export class OrdersService {
     const order = await this.repository.findAdminOrder(id);
     if (!order) throw new NotFoundException('Order not found.');
     return this.toResponse(order);
+  }
+
+  async submitInstaPayProof(
+    userId: string,
+    orderNumber: string,
+    file: Express.Multer.File,
+  ): Promise<OrderResponseDto> {
+    const current = await this.repository.findCustomerOrder(userId, orderNumber);
+    return this.submitOwnedInstaPayProof(current, { userId }, orderNumber, file);
+  }
+
+  async submitShopperInstaPayProof(
+    owner: ShopperOwner,
+    orderNumber: string,
+    file: Express.Multer.File,
+  ): Promise<OrderResponseDto> {
+    this.assertShopperOwner(owner);
+    const current = await this.repository.findShopperOrder(owner, orderNumber);
+    return this.submitOwnedInstaPayProof(current, owner, orderNumber, file);
+  }
+
+  private async submitOwnedInstaPayProof(
+    current: OrderRecord | null,
+    owner: ShopperOwner,
+    orderNumber: string,
+    file: Express.Multer.File,
+  ): Promise<OrderResponseDto> {
+    if (!current) throw new NotFoundException('Order not found.');
+    if (
+      current.paymentMethod !== 'INSTAPAY' ||
+      current.status !== 'WAITING_FOR_PAYMENT' ||
+      current.paymentStatus !== 'WAITING_FOR_PAYMENT'
+    ) {
+      throw new ConflictException('This order is not waiting for an InstaPay transfer receipt.');
+    }
+    if (current.payment.proofSubmittedAt) {
+      throw new ConflictException('A transfer receipt has already been submitted for this order.');
+    }
+
+    const storageOwner = owner.userId ?? owner.guestTokenHash;
+    if (!storageOwner) throw new NotFoundException('Order not found.');
+    const stored = await this.imageStorage.uploadPaymentProof(file.buffer, storageOwner);
+    let committed = false;
+    try {
+      const result = await this.repository.submitInstaPayProof({
+        owner,
+        orderNumber,
+        proofImagePublicId: stored.publicId,
+        submittedAt: new Date(),
+      });
+      if (result === 'not_found') throw new NotFoundException('Order not found.');
+      if (result === 'conflict') {
+        throw new ConflictException(
+          'The transfer receipt was already submitted or the order changed.',
+        );
+      }
+      committed = true;
+      const receipt = await this.imageStorage.readImage(stored.publicId).catch((error: unknown) => {
+        this.logger.error(
+          `Transfer receipt could not be attached for ${result.orderNumber}: ${mailErrorDetails(error)}`,
+        );
+        return null;
+      });
+      await this.mailService
+        .sendOrderReceivedEmail(result, receipt ?? undefined)
+        .catch((error: unknown) =>
+          this.logger.error(
+            `Order received email failed for ${result.orderNumber}: ${mailErrorDetails(error)}`,
+          ),
+        );
+      return this.toResponse(result);
+    } finally {
+      if (!committed) await this.imageStorage.deleteImage(stored.publicId).catch(() => undefined);
+    }
+  }
+
+  async customerPaymentProof(userId: string, orderNumber: string): Promise<StoredImageFile> {
+    const order = await this.repository.findCustomerOrder(userId, orderNumber);
+    if (!order) throw new NotFoundException('Order not found.');
+    return this.readPaymentProof(order);
+  }
+
+  async shopperPaymentProof(owner: ShopperOwner, orderNumber: string): Promise<StoredImageFile> {
+    this.assertShopperOwner(owner);
+    const order = await this.repository.findShopperOrder(owner, orderNumber);
+    if (!order) throw new NotFoundException('Order not found.');
+    return this.readPaymentProof(order);
+  }
+
+  async adminPaymentProof(id: string): Promise<StoredImageFile> {
+    const order = await this.repository.findAdminOrder(id);
+    if (!order) throw new NotFoundException('Order not found.');
+    return this.readPaymentProof(order);
   }
 
   async listAdmin(query: ListAdminOrdersQueryDto): Promise<PaginatedOrdersResponseDto> {
@@ -119,7 +227,9 @@ export class OrdersService {
     if (result === 'conflict') {
       throw new ConflictException('Order changed concurrently. Refresh and try again.');
     }
-    await this.sendStatusEmail(result);
+    if (this.isConfirmationTransition(current.status, result.status)) {
+      await this.sendConfirmationEmail(result);
+    }
     return this.toResponse(result);
   }
 
@@ -138,7 +248,7 @@ export class OrdersService {
     if (result === 'conflict') {
       throw new ConflictException('Only a waiting InstaPay order can be confirmed.');
     }
-    await this.sendStatusEmail(result);
+    await this.sendConfirmationEmail(result);
     return this.toResponse(result);
   }
 
@@ -150,19 +260,35 @@ export class OrdersService {
     return OrderResponseDto.from(order, instructions);
   }
 
-  private async sendStatusEmail(order: OrderRecord): Promise<void> {
+  private isConfirmationTransition(from: OrderStatus, to: OrderStatus): boolean {
+    return (
+      (from === 'PENDING' && to === 'PROCESSING') ||
+      (from === 'WAITING_FOR_PAYMENT' && to === 'PAID')
+    );
+  }
+
+  private async sendConfirmationEmail(order: OrderRecord): Promise<void> {
     await this.mailService
-      .sendOrderStatusUpdated(
-        { email: order.customerEmail, firstName: order.customerFirstName },
-        {
-          orderNumber: order.orderNumber,
-          status: order.status,
-          totalPiasters: order.totalPiasters,
-          paymentMethod: order.paymentMethod,
-        },
-      )
+      .sendOrderConfirmedEmail(order)
       .catch((error: unknown) =>
-        this.logger.error(`Order status email failed for ${order.orderNumber}.`, error),
+        this.logger.error(
+          `Order confirmation email failed for ${order.orderNumber}: ${mailErrorDetails(error)}`,
+        ),
       );
+  }
+
+  private async readPaymentProof(order: OrderRecord): Promise<StoredImageFile> {
+    if (!order.payment.proofImagePublicId) {
+      throw new NotFoundException('Transfer receipt not found.');
+    }
+    const image = await this.imageStorage.readImage(order.payment.proofImagePublicId);
+    if (!image) throw new NotFoundException('Transfer receipt not found.');
+    return image;
+  }
+
+  private assertShopperOwner(owner: ShopperOwner): void {
+    if (!owner.userId && !owner.guestTokenHash) {
+      throw new NotFoundException('Order not found.');
+    }
   }
 }

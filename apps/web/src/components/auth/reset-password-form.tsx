@@ -8,7 +8,7 @@ import { useForm } from 'react-hook-form';
 
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { StatusMessage } from '@/components/ui/status-message';
 import { resetPassword } from '@/lib/api/auth';
 import { errorMessage } from '@/lib/api/http-client';
@@ -66,22 +66,16 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
         htmlFor="password"
         label="New password"
       >
-        <Input
-          autoComplete="new-password"
-          id="password"
-          type="password"
-          {...form.register('password')}
-        />
+        <PasswordInput autoComplete="new-password" id="password" {...form.register('password')} />
       </Field>
       <Field
         error={form.formState.errors.confirmPassword?.message}
         htmlFor="confirmPassword"
         label="Confirm new password"
       >
-        <Input
+        <PasswordInput
           autoComplete="new-password"
           id="confirmPassword"
-          type="password"
           {...form.register('confirmPassword')}
         />
       </Field>

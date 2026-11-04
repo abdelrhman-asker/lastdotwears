@@ -23,12 +23,12 @@ Nginx (TLS termination, compression, security headers, request limits)
 Next.js web container       NestJS API container
                                 |          |
                                 v          v
-                         PostgreSQL    Cloudinary
+                         PostgreSQL   Upload volume
 ```
 
 Only Nginx publishes HTTP/HTTPS ports. PostgreSQL remains on the private Docker network.
-The API exposes health endpoints for container orchestration. Persistent database data
-uses a named Docker volume; media assets live in Cloudinary.
+The API exposes health endpoints for container orchestration. Persistent database data and
+uploaded media use separate named Docker volumes.
 
 ## 3. Repository structure
 
@@ -151,7 +151,7 @@ application service that defines the business operation.
 | `checkout`              | Validates a cart and coordinates pricing, stock reservation, address, payment choice, and order creation. |
 | `orders`                | Immutable order snapshots, lifecycle transitions, history, and invoices.                                  |
 | `payments`              | COD records and manual InstaPay proof/confirmation workflow. No gateway is included.                      |
-| `uploads`               | Signed/validated Cloudinary image operations and product media metadata.                                  |
+| `uploads`               | Validated local image persistence, serving, deletion, and product media metadata.                         |
 | `settings`              | Store identity, InstaPay details, social links, banners, and operational settings.                        |
 | `analytics`             | Admin revenue, order/customer counts, and best-seller read models.                                        |
 | `contact` / `mail`      | Contact submissions and transactional email delivery.                                                     |
@@ -209,8 +209,8 @@ actual sellable size/color combination and owns its SKU, price override if neede
 stock quantity. Available sizes/colors are derived from active variants. This prevents an
 invalid cart combination such as a color and size that is not actually stocked.
 
-Product prices and order totals use integer piasters. Product media stores Cloudinary
-public IDs, secure URLs, dimensions, alternative text, sort order, and a primary flag.
+Product prices and order totals use integer piasters. Product media stores server-file
+identifiers, public URLs, dimensions, alternative text, sort order, and a primary flag.
 Deleting a product is soft by default so historical order lines and analytics remain
 valid.
 
@@ -256,7 +256,7 @@ Emails and other non-critical side effects are dispatched after the database tra
   mutations.
 - Global DTO validation with unknown-field rejection and transformed input types.
 - Helmet, strict origin-based CORS, endpoint-specific throttling, body-size limits, and
-  Cloudinary file type/size validation.
+  decoded image type/size validation.
 - Generic authentication/reset responses to reduce account enumeration.
 - One-time, expiring hashes for email verification and password reset tokens.
 - Customer block checks on every authenticated session refresh and checkout.
@@ -271,7 +271,7 @@ Emails and other non-critical side effects are dispatched after the database tra
 - Product structured data uses schema.org JSON-LD.
 - Catalog pages render on the server with bounded revalidation; inventory and cart data
   remain uncached or user-scoped.
-- Next/Image serves responsive Cloudinary assets with explicit dimensions.
+- Next/Image serves responsive server-hosted assets with explicit dimensions.
 - Search/filter state stays in the URL for shareable and crawl-safe listing pages.
 - Database indexes cover slugs, active/featured flags, category/brand relations, order
   ownership/status/created time, variant SKU, and common catalog sort fields.
@@ -283,7 +283,7 @@ Emails and other non-critical side effects are dispatched after the database tra
 Environment variables are split by ownership:
 
 - Web: public site/API origins and server-only API origin.
-- API: database, JWT/cookie, CORS, email, Cloudinary, Swagger, and bootstrap seed values.
+- API: database, JWT/cookie, CORS, email, upload root, Swagger, and bootstrap seed values.
 - Infrastructure: ports, image tags, database credentials, domains, and TLS paths.
 
 Each application validates its environment at startup with Zod (web) or Nest-compatible
@@ -308,7 +308,7 @@ Modules will be implemented and reviewed in dependency order:
    handling, logging, Swagger, and test harness.
 2. Authentication and users, including roles, secure sessions, verification/reset, and
    seed accounts.
-3. Catalog: categories, brands, products, variants, inventory, Cloudinary uploads, and
+3. Catalog: categories, brands, products, variants, inventory, local image uploads, and
    sample product seed data.
 4. Storefront catalog: home, listings, details, search/filter/sort, metadata, and static
    content pages.

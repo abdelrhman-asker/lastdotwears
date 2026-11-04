@@ -41,8 +41,13 @@ openssl rand -hex 64   # each JWT/pepper secret; run separately three times
 embedded in the internal connection URL. A hexadecimal value satisfies this rule. In Compose env
 files, surround SMTP or seed passwords containing `$` or `#` with single quotes.
 
-Production startup requires working SMTP and Cloudinary credentials. `MAIL_FROM_EMAIL` should use
-a domain with SPF, DKIM, and DMARC configured. Keep `SWAGGER_ENABLED=false` on the public service.
+Production startup requires working SMTP credentials. `MAIL_FROM_EMAIL` should use a domain with
+SPF, DKIM, and DMARC configured. Keep `SWAGGER_ENABLED=false` on the public service. Product and
+banner images persist in the `product_uploads` Docker volume.
+
+For authenticated SMTP, `EMAIL_FROM` must use the `SMTP_USER` mailbox or an alias that the provider
+has explicitly verified. With the supplied Zoho example, keep `EMAIL_FROM` on
+`orders@last-dot.com`; `MAIL_FROM_EMAIL` can remain the public customer-care destination.
 
 ## First deployment
 
@@ -111,6 +116,8 @@ BACKUP_DIRECTORY=/srv/backups/last-dot ./scripts/backup.sh
 
 Copy each `.dump` and `.sha256` file to encrypted offsite storage. For a stricter recovery-point
 objective, supplement logical dumps with tested volume snapshots or PostgreSQL WAL archiving/PITR.
+Back up the `product_uploads` volume with the database dump; database image records are not useful
+without their corresponding files. Test restoring both together.
 A typical root cron entry for a 02:15 Cairo-time daily backup is:
 
 ```cron
@@ -140,6 +147,6 @@ docker compose --env-file .env.production up -d --wait api web nginx
 docker compose --env-file .env.production logs --tail=200 migrate
 ```
 
-Never use `docker compose down --volumes` in production: it deletes the PostgreSQL and certificate
-volumes. Rotate exposed SMTP, Cloudinary, cookie, JWT, and pepper secrets, then rebuild/restart the
-affected services. Changing token peppers invalidates outstanding refresh and one-time tokens.
+Never use `docker compose down --volumes` in production: it deletes PostgreSQL, uploaded images,
+and certificate volumes. Rotate exposed SMTP, cookie, JWT, and pepper secrets, then rebuild/restart
+the affected services. Changing token peppers invalidates outstanding refresh and one-time tokens.

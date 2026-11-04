@@ -37,6 +37,7 @@ WORKDIR /app
 COPY --from=production-dependencies --chown=node:node /production/api/package.json ./package.json
 COPY --from=production-dependencies --chown=node:node /production/api/node_modules ./node_modules
 COPY --from=builder --chown=node:node /workspace/apps/api/dist ./dist
+RUN mkdir -p /app/uploads && chown -R node:node /app/uploads
 USER node
 EXPOSE 4000
 CMD ["node", "dist/main.js"]

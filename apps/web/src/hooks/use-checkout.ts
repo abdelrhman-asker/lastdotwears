@@ -6,10 +6,12 @@ import { commerceQueryKeys } from '@/hooks/use-commerce';
 import {
   getCheckoutQuote,
   getInvoice,
+  getInstaPayProof,
   getOrder,
   getShippingRates,
   listOrders,
   placeOrder,
+  submitInstaPayProof,
 } from '@/lib/api/checkout';
 import type { OrderStatus } from '@/types/orders';
 
@@ -64,6 +66,28 @@ export function useOrder(orderNumber: string) {
     queryKey: checkoutQueryKeys.order(orderNumber),
     queryFn: () => getOrder(orderNumber),
     enabled: Boolean(orderNumber),
+  });
+}
+
+export function useSubmitInstaPayProof(orderNumber: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => submitInstaPayProof(orderNumber, file),
+    onSuccess: (order) => {
+      queryClient.setQueryData(checkoutQueryKeys.order(order.orderNumber), order);
+      void queryClient.invalidateQueries({ queryKey: ['orders', 'history'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'orders'] });
+    },
+  });
+}
+
+export function useInstaPayProof(orderNumber: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...checkoutQueryKeys.order(orderNumber), 'payment-proof'],
+    queryFn: () => getInstaPayProof(orderNumber),
+    enabled: Boolean(orderNumber) && enabled,
+    retry: 1,
+    staleTime: Number.POSITIVE_INFINITY,
   });
 }
 

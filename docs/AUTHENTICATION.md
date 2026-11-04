@@ -14,8 +14,9 @@ intentionally deferred to later gates.
   bearer tokens for non-browser API clients.
 - Opaque refresh tokens are stored only as HMAC-SHA-256 hashes. Every refresh rotates the
   session token; detected reuse revokes the entire token family.
-- A readable random CSRF cookie and matching `x-csrf-token` header protect every unsafe
-  cookie-authenticated request, including login when a browser already has a session.
+- A readable random CSRF cookie and matching `x-csrf-token` header protect unsafe
+  cookie-authenticated requests. Existing browser tabs can fall back to strict `Origin` plus
+  `Sec-Fetch-Site` validation when both identify a configured same-site storefront origin.
 - Blocking a customer and resetting a password revoke all active refresh sessions.
 - Verification and reset tokens are random, hashed at rest, single-use, and expire.
 - Login, registration, verification, password reset, and administrative status changes
@@ -32,6 +33,7 @@ deployment requirement and will be terminated by Nginx in the deployment module.
 | Method  | Endpoint                           | Access         | Purpose                         |
 | ------- | ---------------------------------- | -------------- | ------------------------------- |
 | `POST`  | `/api/v1/auth/register`            | Public         | Register a customer             |
+| `GET`   | `/api/v1/auth/csrf`                | Public         | Restore browser CSRF cookie     |
 | `POST`  | `/api/v1/auth/login`               | Public         | Customer login                  |
 | `POST`  | `/api/v1/admin/auth/login`         | Public         | Verified administrator login    |
 | `POST`  | `/api/v1/auth/refresh`             | Refresh cookie | Rotate the browser session      |

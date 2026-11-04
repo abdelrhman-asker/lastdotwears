@@ -2,6 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
+import { useSyncExternalStore } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,11 @@ import { submitContactMessage } from '@/lib/api/settings';
 import { contactSchema, type ContactInput } from '@/lib/validation/contact';
 
 export function ContactForm() {
+  const isHydrated = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false,
+  );
   const form = useForm<ContactInput>({
     resolver: zodResolver(contactSchema),
     defaultValues: { name: '', email: '', phone: '', orderNumber: '', subject: '', message: '' },
@@ -25,6 +31,7 @@ export function ContactForm() {
   return (
     <form
       className="border border-stone-300 bg-white p-6 sm:p-10"
+      id="contact-form"
       onSubmit={form.handleSubmit((input) => submission.mutate(input))}
     >
       <p className="text-[10px] tracking-[0.2em] text-stone-500 uppercase">Send a message</p>
@@ -85,7 +92,7 @@ export function ContactForm() {
           </Field>
         </div>
       </div>
-      <Button className="mt-7" disabled={submission.isPending} type="submit">
+      <Button className="mt-7" disabled={!isHydrated || submission.isPending} type="submit">
         {submission.isPending ? 'Sending…' : 'Send message'}
       </Button>
     </form>

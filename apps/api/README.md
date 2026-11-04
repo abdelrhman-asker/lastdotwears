@@ -33,7 +33,7 @@ mail configuration, migrations, and seed accounts.
 
 The API provides public catalog reads plus administrator category, brand, product, variant,
 image, and inventory operations. See [`docs/CATALOG.md`](../../docs/CATALOG.md) for endpoints,
-business invariants, Cloudinary configuration, and sample catalog data.
+business invariants, local image-storage configuration, and sample catalog data.
 
 ## Cart and wishlist
 

@@ -6,7 +6,13 @@ import type {
   MailRecipient,
   MailService,
   OrderMailDetails,
+  OrderReceiptAttachment,
 } from '../interfaces/mail-service.interface.js';
+import {
+  buildNewOrderNotificationEmail,
+  buildOrderConfirmedEmail,
+  buildOrderReceivedEmail,
+} from '../templates/order-email.templates.js';
 
 function escapeHtml(value: string): string {
   return value
@@ -21,12 +27,14 @@ function escapeHtml(value: string): string {
 export class TransactionalMailService implements MailService {
   private readonly logger = new Logger(TransactionalMailService.name);
   private readonly transporter: Transporter | null;
-  private readonly from: { name: string; address: string };
+  private readonly from: string | { name: string; address: string };
   private readonly logOnly: boolean;
+  private readonly orderFrom = { name: 'Last Dot Orders', address: 'orders@last-dot.com' };
+  private readonly orderReplyTo = 'orders@last-dot.com';
 
   constructor(private readonly configService: ConfigService) {
     this.logOnly = configService.getOrThrow<string>('MAIL_TRANSPORT') === 'log';
-    this.from = {
+    this.from = configService.get<string>('EMAIL_FROM') ?? {
       name: configService.getOrThrow<string>('MAIL_FROM_NAME'),
       address: configService.getOrThrow<string>('MAIL_FROM_EMAIL'),
     };
@@ -37,6 +45,9 @@ export class TransactionalMailService implements MailService {
           port: configService.getOrThrow<number>('SMTP_PORT'),
           secure: configService.getOrThrow<boolean>('SMTP_SECURE'),
           auth: this.smtpAuthentication(),
+          connectionTimeout: 10_000,
+          greetingTimeout: 10_000,
+          socketTimeout: 20_000,
         });
   }
 
@@ -84,22 +95,58 @@ export class TransactionalMailService implements MailService {
     });
   }
 
-  async sendOrderPlaced(recipient: MailRecipient, order: OrderMailDetails): Promise<void> {
-    await this.sendOrderMessage(
-      recipient,
-      order,
-      `Order ${order.orderNumber} received`,
-      'Thank you for your order. We will keep you updated as it moves through fulfilment.',
-    );
+  async sendOrderReceivedEmail(
+    order: OrderMailDetails,
+    receipt?: OrderReceiptAttachment,
+  ): Promise<void> {
+    const message = buildOrderReceivedEmail(order, Boolean(receipt));
+    await this.sendInformational({
+      from: this.orderFrom,
+      recipientEmail: order.customerEmail,
+      replyTo: this.orderReplyTo,
+      subject: message.subject,
+      text: message.text,
+      html: message.html,
+      completeHtml: true,
+      ...(receipt
+        ? {
+            attachments: [
+              {
+                filename: `receipt-${order.orderNumber}.${this.extensionFor(receipt.contentType)}`,
+                path: receipt.path,
+                contentType: receipt.contentType,
+                cid: 'payment-receipt@last-dot',
+              },
+            ],
+          }
+        : {}),
+    });
   }
 
-  async sendOrderStatusUpdated(recipient: MailRecipient, order: OrderMailDetails): Promise<void> {
-    await this.sendOrderMessage(
-      recipient,
-      order,
-      `Order ${order.orderNumber}: ${order.status.replaceAll('_', ' ').toLowerCase()}`,
-      `Your order status is now ${order.status.replaceAll('_', ' ').toLowerCase()}.`,
-    );
+  async sendOrderConfirmedEmail(order: OrderMailDetails): Promise<void> {
+    const message = buildOrderConfirmedEmail(order);
+    await this.sendInformational({
+      from: this.orderFrom,
+      recipientEmail: order.customerEmail,
+      replyTo: this.orderReplyTo,
+      subject: message.subject,
+      text: message.text,
+      html: message.html,
+      completeHtml: true,
+    });
+  }
+
+  async sendNewOrderNotification(order: OrderMailDetails): Promise<void> {
+    const message = buildNewOrderNotificationEmail(order);
+    await this.sendInformational({
+      from: this.orderFrom,
+      recipientEmail: this.configService.getOrThrow<string>('ORDER_NOTIFICATION_EMAIL'),
+      replyTo: order.customerEmail,
+      subject: message.subject,
+      text: message.text,
+      html: message.html,
+      completeHtml: true,
+    });
   }
 
   private smtpAuthentication(): { user: string; pass: string } | undefined {
@@ -147,11 +194,19 @@ export class TransactionalMailService implements MailService {
   }
 
   private async sendInformational(input: {
+    from?: string | { name: string; address: string };
     recipientEmail: string;
     subject: string;
     text: string;
     html: string;
     replyTo?: string;
+    completeHtml?: boolean;
+    attachments?: Array<{
+      filename: string;
+      path: string;
+      contentType: string;
+      cid: string;
+    }>;
   }): Promise<void> {
     if (this.logOnly) {
       this.logger.log(`${input.subject} for ${input.recipientEmail}`);
@@ -159,30 +214,22 @@ export class TransactionalMailService implements MailService {
     }
     if (!this.transporter) throw new Error('SMTP transport is not initialized.');
     await this.transporter.sendMail({
-      from: this.from,
+      from: input.from ?? this.from,
       to: input.recipientEmail,
       ...(input.replyTo ? { replyTo: input.replyTo } : {}),
       subject: input.subject,
       text: input.text,
-      html: `<div style="font-family:Arial,Helvetica,sans-serif;color:#1c1917;line-height:1.6;max-width:560px;margin:0 auto;padding:32px">${input.html}<p style="margin-top:32px;font-size:12px;color:#78716c">Last-Dot Wears customer care</p></div>`,
+      html: input.completeHtml
+        ? input.html
+        : `<div style="font-family:Arial,Helvetica,sans-serif;color:#1c1917;line-height:1.6;max-width:560px;margin:0 auto;padding:32px">${input.html}<p style="margin-top:32px;font-size:12px;color:#78716c">Last-Dot Wears customer care</p></div>`,
+      ...(input.attachments ? { attachments: input.attachments } : {}),
     });
   }
 
-  private sendOrderMessage(
-    recipient: MailRecipient,
-    order: OrderMailDetails,
-    subject: string,
-    introduction: string,
-  ): Promise<void> {
-    const total = new Intl.NumberFormat('en-EG', {
-      style: 'currency',
-      currency: 'EGP',
-    }).format(order.totalPiasters / 100);
-    return this.sendInformational({
-      recipientEmail: recipient.email,
-      subject,
-      text: `Hello ${recipient.firstName},\n\n${introduction}\n\nOrder: ${order.orderNumber}\nTotal: ${total}\nPayment: ${order.paymentMethod.replaceAll('_', ' ')}`,
-      html: `<p>Hello ${escapeHtml(recipient.firstName)},</p><p>${escapeHtml(introduction)}</p><p><strong>Order</strong><br>${escapeHtml(order.orderNumber)}</p><p><strong>Total</strong><br>${escapeHtml(total)}</p><p><strong>Payment</strong><br>${escapeHtml(order.paymentMethod.replaceAll('_', ' '))}</p>`,
-    });
+  private extensionFor(contentType: string): string {
+    if (contentType === 'image/jpeg') return 'jpg';
+    if (contentType === 'image/avif') return 'avif';
+    if (contentType === 'image/webp') return 'webp';
+    return 'png';
   }
 }

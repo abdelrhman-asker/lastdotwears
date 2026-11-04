@@ -1,4 +1,4 @@
-import { apiRequest } from '@/lib/api/http-client';
+import { apiBlobRequest, apiRequest } from '@/lib/api/http-client';
 import type { CheckoutFormInput } from '@/lib/validation/checkout';
 import type {
   CheckoutQuote,
@@ -38,11 +38,24 @@ export function placeOrder(
 }
 
 export function getOrder(orderNumber: string): Promise<Order> {
-  return apiRequest(`/orders/${encodeURIComponent(orderNumber)}`);
+  return apiRequest(`/checkout/orders/${encodeURIComponent(orderNumber)}`);
+}
+
+export function submitInstaPayProof(orderNumber: string, file: File): Promise<Order> {
+  const body = new FormData();
+  body.append('file', file);
+  return apiRequest(`/checkout/orders/${encodeURIComponent(orderNumber)}/payment-proof`, {
+    method: 'POST',
+    body,
+  });
+}
+
+export function getInstaPayProof(orderNumber: string): Promise<Blob> {
+  return apiBlobRequest(`/checkout/orders/${encodeURIComponent(orderNumber)}/payment-proof`);
 }
 
 export function getInvoice(orderNumber: string): Promise<Order> {
-  return apiRequest(`/orders/${encodeURIComponent(orderNumber)}/invoice`);
+  return apiRequest(`/checkout/orders/${encodeURIComponent(orderNumber)}/invoice`);
 }
 
 export function listOrders(input: {

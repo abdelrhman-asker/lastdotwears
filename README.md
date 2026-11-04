@@ -29,7 +29,7 @@ Completed foundation capabilities include:
   using React Hook Form, Zod, and TanStack Query.
 - Scalable category, brand, product, variant, image, and inventory data models with public
   catalog reads and secure administrator CRUD APIs.
-- Cloudinary server-side product uploads, effective EGP sale-price filtering/sorting,
+- Persistent server-side product uploads, effective EGP sale-price filtering/sorting,
   transactional inventory adjustments, sample catalog data, and complete admin catalog UI.
 - Premium responsive storefront with home merchandising, categories, product listings and
   details, search/filter/sort, pagination, resilient server rendering, and required static pages.
@@ -51,7 +51,7 @@ Completed foundation capabilities include:
 See [docs/FOUNDATION.md](docs/FOUNDATION.md) for local setup and verification commands.
 See [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) for session behavior, endpoints,
 database migration, and seed instructions.
-See [docs/CATALOG.md](docs/CATALOG.md) for catalog invariants, endpoints, Cloudinary setup,
+See [docs/CATALOG.md](docs/CATALOG.md) for catalog invariants, endpoints, image storage setup,
 inventory behavior, and sample data.
 See [docs/STOREFRONT.md](docs/STOREFRONT.md) for public routes, rendering behavior, search
 parameters, SEO, and storefront environment configuration.

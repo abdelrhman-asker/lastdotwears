@@ -36,7 +36,7 @@ export const defaultHomepageBanner: PublicWebsiteSettings['banners'][number] = {
 const fallbackSettings: PublicWebsiteSettings = {
   storeName: 'Last-Dot Wears',
   tagline: 'Modern essentials, considered for life in Egypt.',
-  contactEmail: process.env.NEXT_PUBLIC_CONTACT_EMAIL ?? 'care@lastdotwears.com',
+  contactEmail: process.env.NEXT_PUBLIC_CONTACT_EMAIL ?? 'support@last-dot.com',
   contactPhone: null,
   storeAddress: null,
   businessHours: 'Sunday-Thursday, 10:00-18:00 Cairo time',
@@ -50,7 +50,12 @@ const fallbackSettings: PublicWebsiteSettings = {
 
 export const getPublicWebsiteSettings = cache(async (): Promise<PublicWebsiteSettings> => {
   try {
-    return await publicCatalogRequest<PublicWebsiteSettings>('/settings', ['website-settings']);
+    const response = await fetch(`${getServerEnvironment().INTERNAL_API_URL}/settings`, {
+      cache: 'no-store',
+      headers: { accept: 'application/json' },
+    });
+    if (!response.ok) throw new CatalogUnavailableError();
+    return (await response.json()) as PublicWebsiteSettings;
   } catch {
     return fallbackSettings;
   }

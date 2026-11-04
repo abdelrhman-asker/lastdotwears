@@ -21,6 +21,20 @@ export interface VariantWriteInput {
   position: number;
 }
 
+export interface VariantIdentity {
+  id: string;
+  productId: string;
+  sku: string;
+  size: string;
+  colorName: string;
+  isDeleted: boolean;
+}
+
+export interface VariantConflicts {
+  bySku: VariantIdentity | null;
+  byCombination: VariantIdentity | null;
+}
+
 export interface ProductCreateInput {
   name: string;
   slug: string;
@@ -77,6 +91,17 @@ export interface ProductsRepository {
     actorId: string,
   ): Promise<ProductVariantRecord>;
   findVariant(productId: string, variantId: string): Promise<ProductVariantRecord | null>;
+  findVariantConflicts(
+    productId: string,
+    sku: string,
+    combinationKey: string,
+  ): Promise<VariantConflicts>;
+  restoreVariant(
+    productId: string,
+    variantId: string,
+    input: VariantWriteInput,
+    actorId: string,
+  ): Promise<ProductVariantRecord | null>;
   updateVariant(
     productId: string,
     variantId: string,

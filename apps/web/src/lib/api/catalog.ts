@@ -120,6 +120,26 @@ export function createVariant(
   return apiRequest(`/admin/products/${productId}/variants`, { body: input, method: 'POST' });
 }
 
+export function updateVariant(
+  productId: string,
+  variantId: string,
+  input: {
+    sku?: string;
+    size?: string;
+    colorName?: string;
+    colorHex?: string | null;
+    priceOverridePiasters?: number | null;
+    lowStockThreshold?: number;
+    isActive?: boolean;
+    position?: number;
+  },
+): Promise<ProductVariant> {
+  return apiRequest(`/admin/products/${productId}/variants/${variantId}`, {
+    body: input,
+    method: 'PATCH',
+  });
+}
+
 export function deleteVariant(productId: string, variantId: string): Promise<void> {
   return apiRequest(`/admin/products/${productId}/variants/${variantId}`, { method: 'DELETE' });
 }
