@@ -42,7 +42,11 @@ function CountedLink({
   children: React.ReactNode;
 }) {
   return (
-    <Link href={href} aria-label={label} className="relative grid size-8 lg:size-11 place-items-center">
+    <Link
+      href={href}
+      aria-label={label}
+      className="relative grid size-8 lg:size-11 place-items-center"
+    >
       {children}
       {count > 0 ? (
         <span className="absolute top-1.5 right-0 grid min-w-4 place-items-center rounded-full bg-stone-950 px-1 text-[9px] leading-4 text-white">

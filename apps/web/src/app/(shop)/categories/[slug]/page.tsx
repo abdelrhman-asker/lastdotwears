@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
+import { CategoryViewTracker } from '@/components/analytics/commerce-trackers';
 import { ProductListing } from '@/components/storefront/product-listing';
 import { getPublicCategory } from '@/lib/api/storefront';
 import {
@@ -42,13 +43,20 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
   const query = { ...parseProductListingQuery(rawQuery), category: category.slug };
 
   return (
-    <ProductListing
-      action={`/categories/${category.slug}`}
-      query={query}
-      title={category.name}
-      eyebrow="Category"
-      description={category.description}
-      lockedCategory={category.slug}
-    />
+    <>
+      <CategoryViewTracker
+        categoryId={category.id}
+        categoryName={category.name}
+        categorySlug={category.slug}
+      />
+      <ProductListing
+        action={`/categories/${category.slug}`}
+        query={query}
+        title={category.name}
+        eyebrow="Category"
+        description={category.description}
+        lockedCategory={category.slug}
+      />
+    </>
   );
 }

@@ -4,6 +4,8 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 import { useCart, useClearCart, useRemoveCartItem, useUpdateCartItem } from '@/hooks/use-commerce';
+import { captureAnalyticsEvent } from '@/lib/analytics/client';
+import { piastersToEgp } from '@/lib/analytics/events';
 import { errorMessage } from '@/lib/api/http-client';
 import { formatEgp } from '@/lib/format/currency';
 import type { CartItemIssue } from '@/types/commerce';
@@ -94,12 +96,22 @@ export function CartPage() {
                       value={item.quantity}
                       disabled={pending || item.maxQuantity === 0}
                       className="h-10 min-w-17 border border-stone-300 bg-transparent px-2 text-sm disabled:opacity-50"
-                      onChange={(event) =>
-                        updateItem.mutate({
-                          variantId: item.variant.id,
-                          quantity: Number(event.target.value),
-                        })
-                      }
+                      onChange={(event) => {
+                        const nextQuantity = Number(event.target.value);
+                        const difference = nextQuantity - item.quantity;
+                        updateItem.mutate(
+                          { variantId: item.variant.id, quantity: nextQuantity },
+                          {
+                            onSuccess: () => {
+                              if (difference === 0) return;
+                              void captureAnalyticsEvent(
+                                difference > 0 ? 'add_to_cart' : 'remove_from_cart',
+                                cartItemAnalytics(item, Math.abs(difference)),
+                              );
+                            },
+                          },
+                        );
+                      }}
                     >
                       {quantityOptions(item.quantity, item.maxQuantity).map((quantity) => (
                         <option key={quantity} value={quantity}>
@@ -109,10 +121,19 @@ export function CartPage() {
                     </select>
                   </label>
                   <button
+                    data-analytics-custom="remove-from-cart"
                     type="button"
                     disabled={pending}
                     className="border-b border-stone-500 pb-0.5 text-xs text-stone-500 hover:text-stone-950 disabled:opacity-50"
-                    onClick={() => removeItem.mutate(item.variant.id)}
+                    onClick={() =>
+                      removeItem.mutate(item.variant.id, {
+                        onSuccess: () =>
+                          void captureAnalyticsEvent(
+                            'remove_from_cart',
+                            cartItemAnalytics(item, item.quantity),
+                          ),
+                      })
+                    }
                   >
                     Remove
                   </button>
@@ -122,11 +143,24 @@ export function CartPage() {
           ))}
           <div className="mt-5 flex justify-end">
             <button
+              data-analytics-custom="clear-cart"
               type="button"
               disabled={pending}
               className="text-xs text-stone-500 underline underline-offset-4 disabled:opacity-50"
               onClick={() => {
-                if (window.confirm('Remove every item from your shopping bag?')) clear.mutate();
+                if (window.confirm('Remove every item from your shopping bag?')) {
+                  const items = cart.data.items;
+                  clear.mutate(undefined, {
+                    onSuccess: () => {
+                      for (const item of items) {
+                        void captureAnalyticsEvent(
+                          'remove_from_cart',
+                          cartItemAnalytics(item, item.quantity),
+                        );
+                      }
+                    },
+                  });
+                }
               }}
             >
               Clear bag
@@ -241,4 +275,16 @@ function quantityOptions(current: number, maximum: number): number[] {
   const quantities = Array.from({ length: Math.min(99, maximum) }, (_, index) => index + 1);
   if (!quantities.includes(current)) quantities.push(current);
   return quantities.sort((first, second) => first - second);
+}
+
+function cartItemAnalytics(item: import('@/types/commerce').CartItem, quantity: number) {
+  return {
+    product_id: item.product.id,
+    product_name: item.product.name,
+    sku: item.variant.sku,
+    variant_id: item.variant.id,
+    price_egp: piastersToEgp(item.unitPricePiasters),
+    currency: 'EGP' as const,
+    quantity,
+  };
 }

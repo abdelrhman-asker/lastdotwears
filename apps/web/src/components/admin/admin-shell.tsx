@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { StatusMessage } from '@/components/ui/status-message';
 import { useCurrentUser } from '@/hooks/use-current-user';
+import { resetAnalyticsIdentity } from '@/lib/analytics/client';
 import { logout } from '@/lib/api/auth';
 import { cn } from '@/lib/utils/cn';
 
@@ -52,6 +53,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const signOut = useMutation({
     mutationFn: logout,
     onSettled: () => {
+      resetAnalyticsIdentity();
       queryClient.clear();
       router.replace('/admin/login');
     },

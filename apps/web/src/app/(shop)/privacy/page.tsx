@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy policy" updated="2 August 2026">
+    <LegalPage title="Privacy policy" updated="8 November 2026">
       <LegalSection title="1. Information we collect">
         We collect information you provide when creating an account, placing an order, contacting
         customer care, or updating your profile. This can include your name, email address, phone
@@ -26,20 +26,31 @@ export default function PrivacyPage() {
       <LegalSection title="3. Cookies and security">
         Essential cookies keep authenticated sessions secure and protect requests against forgery.
         We apply access controls, password hashing, encryption in transit, rate limits, and audit
-        records. No internet service can guarantee absolute security, so credentials should always
-        be kept private.
+        records. Optional PostHog analytics is not loaded until you accept it. You can reject it or
+        change your choice at any time using the Privacy choices control. No internet service can
+        guarantee absolute security, so credentials should always be kept private.
       </LegalSection>
-      <LegalSection title="4. Service providers">
+      <LegalSection title="4. Optional analytics">
+        If you consent, we use PostHog Cloud to understand page visits, traffic sources, product and
+        category interest, link interactions, cart and wishlist activity, checkout progress, and
+        completed purchases. Anonymous visitors receive a browser identifier; signed-in customers
+        are associated only with their internal account ID, not their name or email. Session
+        recording requires a separate choice, masks all text and form inputs, and is disabled on
+        authentication, account, checkout, order, and administration pages. We do not send form
+        values, addresses, phone numbers, payment details, uploaded receipts, passwords, or
+        authentication tokens to PostHog.
+      </LegalSection>
+      <LegalSection title="5. Service providers">
         We may share the minimum information needed with hosting, database, image-storage, email,
-        delivery, and operational service providers. These providers process information for the
-        store and may not use it for unrelated purposes.
+        delivery, analytics, and operational service providers. These providers process information
+        for the store and may not use it for unrelated purposes.
       </LegalSection>
-      <LegalSection title="5. Retention and your choices">
+      <LegalSection title="6. Retention and your choices">
         We retain information for as long as needed to provide the service, maintain financial and
         security records, resolve disputes, and meet applicable legal requirements. You may request
         access, correction, or deletion where legally available by contacting customer care.
       </LegalSection>
-      <LegalSection title="6. Contact">
+      <LegalSection title="7. Contact">
         Privacy questions and requests can be sent to{' '}
         <a
           className="border-b border-stone-900"

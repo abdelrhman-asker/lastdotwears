@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 
+import { CheckoutStartedTracker } from '@/components/analytics/commerce-trackers';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -14,6 +15,7 @@ import { useAddresses } from '@/hooks/use-addresses';
 import { useCheckoutQuote, usePlaceOrder, useShippingRates } from '@/hooks/use-checkout';
 import { useCart } from '@/hooks/use-commerce';
 import { useCurrentUser } from '@/hooks/use-current-user';
+import { captureAnalyticsEvent } from '@/lib/analytics/client';
 import { ApiError, errorMessage } from '@/lib/api/http-client';
 import { formatEgp } from '@/lib/format/currency';
 import { checkoutSchema, type CheckoutFormInput } from '@/lib/validation/checkout';
@@ -157,7 +159,25 @@ function CheckoutForm({
     idempotencyKey.current ??= crypto.randomUUID();
     place.mutate(
       { ...input, couponCode: appliedCoupon, idempotencyKey: idempotencyKey.current },
-      { onSuccess: (order) => router.replace(`/orders/${order.orderNumber}`) },
+      {
+        onSuccess: (order) => {
+          void captureAnalyticsEvent('order_placed', {
+            order_id: order.id,
+            payment_method: order.paymentMethod,
+            item_count: order.items.reduce((total, item) => total + item.quantity, 0),
+            total_egp: order.totalPiasters / 100,
+            currency: 'EGP',
+            product_ids: [
+              ...new Set(
+                order.items
+                  .map((item) => item.productId)
+                  .filter((productId): productId is string => Boolean(productId)),
+              ),
+            ],
+          });
+          router.replace(`/orders/${order.orderNumber}`);
+        },
+      },
     );
   });
 
@@ -178,6 +198,7 @@ function CheckoutForm({
 
   return (
     <div className="mx-auto max-w-[1500px] px-5 py-12 sm:px-8 lg:px-12 lg:py-18">
+      <CheckoutStartedTracker itemCount={cart.itemCount} subtotalPiasters={cart.subtotalPiasters} />
       <header className="border-b border-stone-300 pb-8">
         <p className="text-[10px] tracking-[0.22em] text-stone-500 uppercase">Secure checkout</p>
         <h1 className="mt-4 font-serif text-5xl tracking-[-0.045em] sm:text-6xl">
@@ -475,6 +496,7 @@ function CheckoutForm({
             </div>
           ) : null}
           <Button
+            data-analytics-custom="place-order"
             className="mt-7 min-h-13 w-full text-xs tracking-[0.14em] uppercase"
             disabled={quote.isPending || place.isPending}
             type="submit"

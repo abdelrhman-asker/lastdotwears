@@ -13,11 +13,29 @@ const buildEnvironmentSchema = z.object({
 
 const buildEnvironment = buildEnvironmentSchema.parse(process.env);
 const projectDirectory = path.dirname(fileURLToPath(import.meta.url));
+const developmentScriptPolicy = process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : '';
+
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  `script-src 'self' 'unsafe-inline'${developmentScriptPolicy} https://*.posthog.com`,
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data:",
+  "connect-src 'self' https://*.posthog.com",
+  "worker-src 'self' blob: data:",
+  "frame-ancestors 'self' https://eu.posthog.com",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+  process.env.NODE_ENV === 'production' ? 'upgrade-insecure-requests' : '',
+]
+  .filter(Boolean)
+  .join('; ');
 
 const securityHeaders = [
   { key: 'x-content-type-options', value: 'nosniff' },
-  { key: 'x-frame-options', value: 'DENY' },
   { key: 'referrer-policy', value: 'strict-origin-when-cross-origin' },
+  { key: 'content-security-policy', value: contentSecurityPolicy },
   {
     key: 'permissions-policy',
     value: 'camera=(), microphone=(), geolocation=(), payment=()',

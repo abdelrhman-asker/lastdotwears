@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
 import { useAddCartItem } from '@/hooks/use-commerce';
+import { captureAnalyticsEvent } from '@/lib/analytics/client';
+import { piastersToEgp } from '@/lib/analytics/events';
 import { errorMessage } from '@/lib/api/http-client';
 import { formatEgp } from '@/lib/format/currency';
 import type { ProductVariant } from '@/types/catalog';
@@ -13,10 +15,14 @@ import { WishlistButton } from './wishlist-button';
 export function ProductPurchasePanel({
   productId,
   productName,
+  categoryName,
+  pricePiasters,
   variants,
 }: {
   productId: string;
   productName: string;
+  categoryName: string;
+  pricePiasters: number;
   variants: ProductVariant[];
 }) {
   const sellableVariants = variants.filter((variant) => variant.isActive);
@@ -134,6 +140,7 @@ export function ProductPurchasePanel({
       ) : null}
 
       <button
+        data-analytics-custom="add-to-cart"
         type="button"
         disabled={!selected || selected.stockQuantity <= 0 || addItem.isPending}
         className="mt-7 min-h-13 w-full bg-stone-950 px-6 text-xs tracking-[0.15em] text-white uppercase transition-colors hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-400"
@@ -143,7 +150,19 @@ export function ProductPurchasePanel({
           addItem.mutate(
             { variantId: selected.id, quantity },
             {
-              onSuccess: () => setMessage('Added to your shopping bag.'),
+              onSuccess: () => {
+                setMessage('Added to your shopping bag.');
+                void captureAnalyticsEvent('add_to_cart', {
+                  product_id: productId,
+                  product_name: productName,
+                  category: categoryName,
+                  sku: selected.sku,
+                  variant_id: selected.id,
+                  price_egp: piastersToEgp(selected.priceOverridePiasters ?? pricePiasters),
+                  currency: 'EGP',
+                  quantity,
+                });
+              },
               onError: (error) => setMessage(errorMessage(error)),
             },
           );

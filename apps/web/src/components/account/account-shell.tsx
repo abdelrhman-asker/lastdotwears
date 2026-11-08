@@ -8,6 +8,7 @@ import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { StatusMessage } from '@/components/ui/status-message';
 import { useCurrentUser } from '@/hooks/use-current-user';
+import { resetAnalyticsIdentity } from '@/lib/analytics/client';
 import { logout } from '@/lib/api/auth';
 import { ApiError, errorMessage } from '@/lib/api/http-client';
 import { cn } from '@/lib/utils/cn';
@@ -27,6 +28,7 @@ export function AccountShell({ children }: { children: ReactNode }) {
   const signOut = useMutation({
     mutationFn: logout,
     onSettled: () => {
+      resetAnalyticsIdentity();
       queryClient.clear();
       router.replace('/login');
     },

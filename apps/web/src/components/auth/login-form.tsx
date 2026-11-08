@@ -14,6 +14,7 @@ import { PasswordInput } from '@/components/ui/password-input';
 import { StatusMessage } from '@/components/ui/status-message';
 import { commerceQueryKeys } from '@/hooks/use-commerce';
 import { currentUserQueryKey } from '@/hooks/use-current-user';
+import { captureAnalyticsEvent, identifyAnalyticsUser } from '@/lib/analytics/client';
 import { loginAdministrator, loginCustomer } from '@/lib/api/auth';
 import { errorMessage } from '@/lib/api/http-client';
 import { loginSchema, type LoginInput } from '@/lib/validation/auth';
@@ -35,6 +36,8 @@ export function LoginForm({ admin = false, redirectTo }: LoginFormProps) {
       await queryClient.invalidateQueries({ queryKey: currentUserQueryKey });
 
       if (!admin) {
+        await identifyAnalyticsUser(user.id);
+        await captureAnalyticsEvent('login_success', { user_id: user.id });
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: commerceQueryKeys.cart }),
           queryClient.invalidateQueries({ queryKey: commerceQueryKeys.wishlist }),
@@ -74,7 +77,12 @@ export function LoginForm({ admin = false, redirectTo }: LoginFormProps) {
           </Link>
         </div>
       ) : null}
-      <Button className="w-full" disabled={mutation.isPending} type="submit">
+      <Button
+        className="w-full"
+        data-analytics-custom="login"
+        disabled={mutation.isPending}
+        type="submit"
+      >
         {mutation.isPending ? 'Signing in…' : admin ? 'Sign in securely' : 'Sign in'}
       </Button>
       {!admin ? (

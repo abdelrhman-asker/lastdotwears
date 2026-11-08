@@ -1,6 +1,10 @@
+'use client';
+
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { captureAnalyticsEvent } from '@/lib/analytics/client';
+import { piastersToEgp } from '@/lib/analytics/events';
 import { discountPercentage, formatEgp } from '@/lib/format/currency';
 import type { Product } from '@/types/catalog';
 
@@ -9,17 +13,33 @@ import { WishlistButton } from './wishlist-button';
 export function ProductCard({
   product,
   priority = false,
+  source = 'product_grid',
 }: {
   product: Product;
   priority?: boolean;
+  source?: string;
 }) {
   const image = product.images.find((candidate) => candidate.isPrimary) ?? product.images[0];
   const effectivePrice = product.salePricePiasters ?? product.pricePiasters;
+  const trackClick = () =>
+    void captureAnalyticsEvent('product_clicked', {
+      product_id: product.id,
+      product_name: product.name,
+      category: product.category.name,
+      category_id: product.category.id,
+      price_egp: piastersToEgp(effectivePrice),
+      currency: 'EGP',
+      source,
+    });
 
   return (
     <article className="group min-w-0">
       <div className="relative aspect-[4/5] overflow-hidden bg-[#e9e5de]">
-        <Link href={`/products/${product.slug}`} className="absolute inset-0 block">
+        <Link
+          href={`/products/${product.slug}`}
+          className="absolute inset-0 block"
+          onClick={trackClick}
+        >
           {image ? (
             <Image
               src={image.secureUrl}
@@ -56,7 +76,7 @@ export function ProductCard({
           className="absolute top-3 right-3 z-10 size-10 min-h-0 p-0"
         />
       </div>
-      <Link href={`/products/${product.slug}`} className="block pt-4">
+      <Link href={`/products/${product.slug}`} className="block pt-4" onClick={trackClick}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h3 className="truncate text-sm tracking-tight">{product.name}</h3>

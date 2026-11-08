@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { useToggleWishlist } from '@/hooks/use-commerce';
+import { captureAnalyticsEvent } from '@/lib/analytics/client';
 import { errorMessage } from '@/lib/api/http-client';
 import { cn } from '@/lib/utils/cn';
 
@@ -26,6 +27,7 @@ export function WishlistButton({
   return (
     <>
       <button
+        data-analytics-custom="wishlist-toggle"
         type="button"
         disabled={toggle.isPending}
         aria-pressed={saved}
@@ -38,8 +40,14 @@ export function WishlistButton({
           toggle.mutate(
             { productId, saved },
             {
-              onSuccess: () =>
-                setAnnouncement(saved ? 'Removed from wishlist.' : 'Saved to wishlist.'),
+              onSuccess: () => {
+                setAnnouncement(saved ? 'Removed from wishlist.' : 'Saved to wishlist.');
+                void captureAnalyticsEvent(saved ? 'remove_from_wishlist' : 'add_to_wishlist', {
+                  product_id: productId,
+                  product_name: productName,
+                  currency: 'EGP',
+                });
+              },
               onError: (error) => setAnnouncement(errorMessage(error)),
             },
           )

@@ -6,6 +6,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { useMemo, useRef, useState } from 'react';
 
 import { formatEgp } from '@/lib/format/currency';
+import { captureAnalyticsEvent } from '@/lib/analytics/client';
 import type { Product } from '@/types/catalog';
 
 import { ArrowIcon } from './icons';
@@ -113,11 +114,7 @@ export function FashionHero({
   }
 
   return (
-    <section
-      className={styles.campaign}
-      style={campaignStyle}
-      aria-labelledby="fashion-hero-title"
-    >
+    <section className={styles.campaign} style={campaignStyle} aria-labelledby="fashion-hero-title">
       <span className={`${styles.orbit} ${styles.orbitOne}`} aria-hidden="true" />
       <span className={`${styles.orbit} ${styles.orbitTwo}`} aria-hidden="true" />
 
@@ -281,21 +278,32 @@ export function FashionHero({
                 </p>
                 <h1 id="fashion-hero-title">{activeProduct.name}</h1>
                 <div className={styles.priceLine}>
-                  <p>
-                    {formatEgp(activeProduct.salePricePiasters ?? activeProduct.pricePiasters)}
-                  </p>
+                  <p>{formatEgp(activeProduct.salePricePiasters ?? activeProduct.pricePiasters)}</p>
                   {activeProduct.salePricePiasters ? (
                     <del>{formatEgp(activeProduct.pricePiasters)}</del>
                   ) : null}
                   <span
-                    className={
-                      activeProduct.stockQuantity > 0 ? styles.inStock : styles.outOfStock
-                    }
+                    className={activeProduct.stockQuantity > 0 ? styles.inStock : styles.outOfStock}
                   >
                     {activeProduct.stockQuantity > 0 ? 'Available' : 'Out of stock'}
                   </span>
                 </div>
-                <Link href={`/products/${activeProduct.slug}`} className={styles.exploreButton}>
+                <Link
+                  href={`/products/${activeProduct.slug}`}
+                  className={styles.exploreButton}
+                  onClick={() =>
+                    void captureAnalyticsEvent('product_clicked', {
+                      product_id: activeProduct.id,
+                      product_name: activeProduct.name,
+                      category: activeProduct.category.name,
+                      category_id: activeProduct.category.id,
+                      price_egp:
+                        (activeProduct.salePricePiasters ?? activeProduct.pricePiasters) / 100,
+                      currency: 'EGP',
+                      source: 'homepage_hero',
+                    })
+                  }
+                >
                   Explore product <ArrowIcon className="size-4" />
                 </Link>
               </div>
@@ -327,15 +335,5 @@ export function FashionHero({
         </div>
       </div>
     </section>
-  );
-}
-
-function ClothingHanger() {
-  return (
-    <svg className={styles.hanger} viewBox="0 0 180 92" aria-hidden="true">
-      <path d="M88 34c0-8 13-7 13-17 0-8-7-13-14-10-4 2-6 5-6 9" />
-      <path d="M91 32 12 77c-8 5-5 10 3 10h150c8 0 11-5 3-10L91 32Z" />
-      <path d="M27 80h126" />
-    </svg>
   );
 }

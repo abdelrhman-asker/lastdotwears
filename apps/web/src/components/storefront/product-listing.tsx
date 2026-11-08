@@ -1,5 +1,6 @@
 import { listPublicBrands, listPublicCategories, listPublicProducts } from '@/lib/api/storefront';
 import type { ProductListingQuery } from '@/lib/validation/storefront-query';
+import { ProductSearchTracker } from '@/components/analytics/commerce-trackers';
 
 import { Pagination } from './pagination';
 import { ProductFilters } from './product-filters';
@@ -28,6 +29,7 @@ export async function ProductListing({
 
   return (
     <div className="mx-auto max-w-[1600px] px-5 py-12 sm:px-8 lg:px-12 lg:py-18">
+      {query.q ? <ProductSearchTracker searchTerm={query.q} resultCount={products.total} /> : null}
       <header className="max-w-3xl">
         <p className="text-[10px] tracking-[0.22em] text-stone-500 uppercase">{eyebrow}</p>
         <h1 className="mt-4 font-serif text-5xl leading-none tracking-[-0.04em] sm:text-6xl lg:text-7xl">

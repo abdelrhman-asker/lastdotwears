@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
+import { PurchaseCompletedTracker } from '@/components/analytics/commerce-trackers';
 import { Button } from '@/components/ui/button';
 import { StatusMessage } from '@/components/ui/status-message';
 import { useInstaPayProof, useOrder, useSubmitInstaPayProof } from '@/hooks/use-checkout';
@@ -54,6 +55,21 @@ export function OrderConfirmationPage({ orderNumber }: { orderNumber: string }) 
   const paymentProofSubmitted = Boolean(data.payment.proofSubmittedAt);
   return (
     <div className="mx-auto max-w-5xl px-5 py-14 sm:px-8 lg:py-20">
+      {data.payment.status === 'PAID' ? (
+        <PurchaseCompletedTracker
+          orderId={data.id}
+          paymentMethod={data.paymentMethod}
+          itemCount={data.items.reduce((total, item) => total + item.quantity, 0)}
+          totalPiasters={data.totalPiasters}
+          productIds={[
+            ...new Set(
+              data.items
+                .map((item) => item.productId)
+                .filter((productId): productId is string => Boolean(productId)),
+            ),
+          ]}
+        />
+      ) : null}
       <header className="border-b border-stone-300 pb-8 text-center">
         <p className="text-[10px] tracking-[0.22em] text-stone-500 uppercase">
           {data.paymentMethod === 'INSTAPAY' && !paymentProofSubmitted

@@ -14,6 +14,7 @@ import { PasswordInput } from '@/components/ui/password-input';
 import { StatusMessage } from '@/components/ui/status-message';
 import { commerceQueryKeys } from '@/hooks/use-commerce';
 import { currentUserQueryKey } from '@/hooks/use-current-user';
+import { captureAnalyticsEvent, identifyAnalyticsUser } from '@/lib/analytics/client';
 import { registerCustomer } from '@/lib/api/auth';
 import { errorMessage } from '@/lib/api/http-client';
 import { registerSchema, type RegisterFormInput } from '@/lib/validation/auth';
@@ -27,6 +28,8 @@ export function RegisterForm() {
     mutationFn: registerCustomer,
     onSuccess: async ({ user }) => {
       queryClient.setQueryData(currentUserQueryKey, user);
+      await identifyAnalyticsUser(user.id);
+      await captureAnalyticsEvent('signup_success', { user_id: user.id });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: commerceQueryKeys.cart }),
         queryClient.invalidateQueries({ queryKey: commerceQueryKeys.wishlist }),
@@ -92,7 +95,12 @@ export function RegisterForm() {
           {...form.register('confirmPassword')}
         />
       </Field>
-      <Button className="w-full" disabled={mutation.isPending} type="submit">
+      <Button
+        className="w-full"
+        data-analytics-custom="signup"
+        disabled={mutation.isPending}
+        type="submit"
+      >
         {mutation.isPending ? 'Creating account…' : 'Create account'}
       </Button>
       <p className="text-center text-sm text-stone-600">

@@ -67,6 +67,8 @@ See [docs/STORE_SETTINGS_AND_CONTACT.md](docs/STORE_SETTINGS_AND_CONTACT.md) for
 merchandising, contact, email, migration, seed, and verification behavior.
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the production environment, one-command Compose
 deployment, TLS, initial seed, monitoring, updates, backups, restores, and incident procedures.
+See [docs/ANALYTICS.md](docs/ANALYTICS.md) for consent-gated PostHog Cloud analytics, dashboard
+setup, verification, and production deployment.
 
 ## Repository boundaries
 

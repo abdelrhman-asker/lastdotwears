@@ -3,6 +3,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import { ProductViewTracker } from '@/components/analytics/commerce-trackers';
 import { ProductGrid } from '@/components/storefront/product-grid';
 import { ProductPurchasePanel } from '@/components/storefront/product-purchase-panel';
 import { SectionHeading } from '@/components/storefront/section-heading';
@@ -88,6 +89,17 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   return (
     <>
+      <ProductViewTracker
+        product={{
+          product_id: product.id,
+          product_name: product.name,
+          category: product.category.name,
+          category_id: product.category.id,
+          sku: product.variants[0]?.sku,
+          price_egp: effectivePrice / 100,
+          currency: 'EGP',
+        }}
+      />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replaceAll('<', '\\u003c') }}
@@ -142,6 +154,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
             <ProductPurchasePanel
               productId={product.id}
               productName={product.name}
+              categoryName={product.category.name}
+              pricePiasters={effectivePrice}
               variants={product.variants}
             />
 

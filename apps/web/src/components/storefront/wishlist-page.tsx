@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 import { useToggleWishlist, useWishlist } from '@/hooks/use-commerce';
+import { captureAnalyticsEvent } from '@/lib/analytics/client';
 import { errorMessage } from '@/lib/api/http-client';
 import { formatEgp } from '@/lib/format/currency';
 
@@ -113,10 +114,23 @@ export function WishlistPage() {
                     Choose options
                   </Link>
                   <button
+                    data-analytics-custom="remove-from-wishlist"
                     type="button"
                     disabled={toggle.isPending}
                     className="min-h-11 border border-stone-300 px-3 text-[10px] tracking-[0.12em] uppercase disabled:opacity-50"
-                    onClick={() => toggle.mutate({ productId: item.product.id, saved: true })}
+                    onClick={() =>
+                      toggle.mutate(
+                        { productId: item.product.id, saved: true },
+                        {
+                          onSuccess: () =>
+                            void captureAnalyticsEvent('remove_from_wishlist', {
+                              product_id: item.product.id,
+                              product_name: item.product.name,
+                              currency: 'EGP',
+                            }),
+                        },
+                      )
+                    }
                   >
                     Remove
                   </button>

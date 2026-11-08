@@ -104,6 +104,9 @@ services:
         NEXT_PUBLIC_SITE_URL: https://${DOMAIN}
         NEXT_PUBLIC_API_URL: https://${DOMAIN}/api/v1
         NEXT_PUBLIC_CONTACT_EMAIL: ${MAIL_FROM_EMAIL}
+        NEXT_PUBLIC_ANALYTICS_ENABLED: ${NEXT_PUBLIC_ANALYTICS_ENABLED:-false}
+        NEXT_PUBLIC_POSTHOG_KEY: ${NEXT_PUBLIC_POSTHOG_KEY:-}
+        NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://eu.i.posthog.com}
         INTERNAL_API_URL: http://api:4000/api/v1
     restart: unless-stopped
     init: true
@@ -114,6 +117,9 @@ services:
       NEXT_PUBLIC_SITE_URL: https://${DOMAIN}
       NEXT_PUBLIC_API_URL: https://${DOMAIN}/api/v1
       NEXT_PUBLIC_CONTACT_EMAIL: ${MAIL_FROM_EMAIL}
+      NEXT_PUBLIC_ANALYTICS_ENABLED: ${NEXT_PUBLIC_ANALYTICS_ENABLED:-false}
+      NEXT_PUBLIC_POSTHOG_KEY: ${NEXT_PUBLIC_POSTHOG_KEY:-}
+      NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://eu.i.posthog.com}
       INTERNAL_API_URL: http://api:4000/api/v1
       NEXT_OUTPUT_MODE: standalone
     expose:
