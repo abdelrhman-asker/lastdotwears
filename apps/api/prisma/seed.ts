@@ -43,9 +43,9 @@ const sampleAddressId = '2c41d7fe-8941-4fd0-9ca4-9dc224c4d6a1';
 const sampleBannerId = '69d21843-e917-4e38-ab3c-6f91bbd7b80b';
 
 const socialLinks = [
-  ['instagram', 'Instagram', 'https://www.instagram.com/'],
-  ['facebook', 'Facebook', 'https://www.facebook.com/'],
-  ['tiktok', 'TikTok', 'https://www.tiktok.com/'],
+  ['instagram', 'Instagram', 'https://www.instagram.com/lastdot_wears?'],
+  // ['facebook', 'Facebook', 'https://www.facebook.com/'],
+  ['tiktok', 'TikTok', 'https://www.tiktok.com/@lastdot_wears'],
 ] as const;
 
 const shippingRates = [
@@ -419,7 +419,12 @@ async function seed(): Promise<void> {
   for (const [platform, label, url] of socialLinks) {
     await prisma.socialLink.upsert({
       where: { platform },
-      update: {},
+      update: {
+        label,
+        url,
+        position: socialLinks.findIndex(([key]) => key === platform),
+        isActive: true,
+      },
       create: {
         platform,
         label,
@@ -428,6 +433,11 @@ async function seed(): Promise<void> {
       },
     });
   }
+
+  await prisma.socialLink.updateMany({
+    where: { platform: 'facebook' },
+    data: { isActive: false },
+  });
 
   await prisma.homepageBanner.upsert({
     where: { id: sampleBannerId },
