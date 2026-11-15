@@ -7,9 +7,10 @@ import { ArrowIcon } from '@/components/storefront/icons';
 import { ProductGrid } from '@/components/storefront/product-grid';
 import { SectionHeading } from '@/components/storefront/section-heading';
 import { getPublicWebsiteSettings, safeHomeCatalog } from '@/lib/api/storefront';
+import { canonicalUrl } from '@/lib/seo/canonical';
 
 export const metadata: Metadata = {
-  alternates: { canonical: '/' },
+  alternates: { canonical: canonicalUrl('/') },
 };
 
 export default async function HomePage() {

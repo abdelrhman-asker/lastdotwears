@@ -2,12 +2,13 @@ import type { Metadata } from 'next';
 
 import { ContactForm } from '@/components/storefront/contact-form';
 import { getPublicWebsiteSettings } from '@/lib/api/storefront';
+import { canonicalUrl } from '@/lib/seo/canonical';
 
 export const metadata: Metadata = {
   title: 'Contact',
   description:
     'Contact Last-Dot Wears customer care for product, delivery, payment, or order help.',
-  alternates: { canonical: '/contact' },
+  alternates: { canonical: canonicalUrl('/contact') },
 };
 
 export default async function ContactPage() {

@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
-import { clientEnvironment } from '@/lib/env/client';
+import { canonicalSiteOrigin } from '@/lib/seo/canonical';
 import { AppProviders } from '@/providers/app-providers';
 import '@/styles/globals.css';
 
 export const metadata: Metadata = {
-  metadataBase: new URL(clientEnvironment.NEXT_PUBLIC_SITE_URL),
+  metadataBase: new URL(canonicalSiteOrigin),
   title: {
     default: 'Last-Dot Wears — Modern Clothing in Egypt',
     template: '%s | Last-Dot Wears',

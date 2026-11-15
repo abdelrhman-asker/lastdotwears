@@ -4,12 +4,13 @@ import Link from 'next/link';
 import { CatalogUnavailable } from '@/components/storefront/catalog-unavailable';
 import { ArrowIcon } from '@/components/storefront/icons';
 import { listPublicCategories } from '@/lib/api/storefront';
+import { canonicalUrl } from '@/lib/seo/canonical';
 import type { Category } from '@/types/catalog';
 
 export const metadata: Metadata = {
   title: 'Categories',
   description: 'Explore modern clothing and accessories by category.',
-  alternates: { canonical: '/categories' },
+  alternates: { canonical: canonicalUrl('/categories') },
 };
 
 export default async function CategoriesPage() {

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 
 import { ProductListing } from '@/components/storefront/product-listing';
+import { canonicalUrl } from '@/lib/seo/canonical';
 import {
   parseProductListingQuery,
   type StorefrontSearchParams,
@@ -9,7 +10,7 @@ import {
 export const metadata: Metadata = {
   title: 'Shop all',
   description: 'Shop modern clothing, relaxed tailoring, and accessories delivered across Egypt.',
-  alternates: { canonical: '/products' },
+  alternates: { canonical: canonicalUrl('/products') },
 };
 
 export default async function ProductsPage({

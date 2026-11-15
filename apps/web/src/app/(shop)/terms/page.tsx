@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
 
 import { clientEnvironment } from '@/lib/env/client';
+import { canonicalUrl } from '@/lib/seo/canonical';
 
 export const metadata: Metadata = {
   title: 'Terms & conditions',
   description: 'Terms governing use of the Last-Dot Wears website and purchases in Egypt.',
-  alternates: { canonical: '/terms' },
+  alternates: { canonical: canonicalUrl('/terms') },
 };
 
 export default function TermsPage() {

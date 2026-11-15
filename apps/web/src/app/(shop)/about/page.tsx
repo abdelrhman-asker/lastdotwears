@@ -2,11 +2,12 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { ArrowIcon } from '@/components/storefront/icons';
+import { canonicalUrl } from '@/lib/seo/canonical';
 
 export const metadata: Metadata = {
   title: 'About',
   description: 'Our approach to considered clothing for modern life in Egypt.',
-  alternates: { canonical: '/about' },
+  alternates: { canonical: canonicalUrl('/about') },
 };
 
 export default function AboutPage() {

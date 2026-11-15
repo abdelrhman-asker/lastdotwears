@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
 
 import { clientEnvironment } from '@/lib/env/client';
+import { canonicalUrl } from '@/lib/seo/canonical';
 
 export const metadata: Metadata = {
   title: 'Privacy policy',
   description: 'How Last-Dot Wears collects, uses, and protects customer information.',
-  alternates: { canonical: '/privacy' },
+  alternates: { canonical: canonicalUrl('/privacy') },
 };
 
 export default function PrivacyPage() {

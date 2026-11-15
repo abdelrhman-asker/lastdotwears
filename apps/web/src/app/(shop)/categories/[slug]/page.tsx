@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { CategoryViewTracker } from '@/components/analytics/commerce-trackers';
 import { ProductListing } from '@/components/storefront/product-listing';
 import { getPublicCategory } from '@/lib/api/storefront';
+import { canonicalUrl } from '@/lib/seo/canonical';
 import {
   parseProductListingQuery,
   type StorefrontSearchParams,
@@ -23,12 +24,12 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
       title: category.name,
       description:
         category.description ?? `Shop ${category.name.toLowerCase()} from Last-Dot Wears.`,
-      alternates: { canonical: `/categories/${category.slug}` },
+      alternates: { canonical: canonicalUrl(`/categories/${category.slug}`) },
       openGraph: {
         title: `${category.name} | Last-Dot Wears`,
         description:
           category.description ?? `Shop ${category.name.toLowerCase()} from Last-Dot Wears.`,
-        url: `/categories/${category.slug}`,
+        url: canonicalUrl(`/categories/${category.slug}`),
       },
     };
   } catch {

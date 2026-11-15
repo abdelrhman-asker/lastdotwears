@@ -10,6 +10,7 @@ import { SectionHeading } from '@/components/storefront/section-heading';
 import { getPublicProduct, listPublicProducts } from '@/lib/api/storefront';
 import { discountPercentage, formatEgp } from '@/lib/format/currency';
 import { clientEnvironment } from '@/lib/env/client';
+import { canonicalUrl } from '@/lib/seo/canonical';
 import type { Product } from '@/types/catalog';
 
 interface ProductPageProps {
@@ -26,11 +27,11 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
     return {
       title: product.name,
       description,
-      alternates: { canonical: `/products/${product.slug}` },
+      alternates: { canonical: canonicalUrl(`/products/${product.slug}`) },
       openGraph: {
         title: `${product.name} | Last-Dot Wears`,
         description,
-        url: `/products/${product.slug}`,
+        url: canonicalUrl(`/products/${product.slug}`),
         ...(image
           ? {
               images: [
