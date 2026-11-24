@@ -145,31 +145,39 @@ export function listHomepageBanners(): Promise<HomepageBanner[]> {
   return apiRequest('/admin/settings/banners');
 }
 
-export function createHomepageBanner(input: HomepageBannerWriteInput): Promise<HomepageBanner> {
-  return apiRequest('/admin/settings/banners', { method: 'POST', body: input });
+export function createHomepageBanner(
+  input: HomepageBannerWriteInput,
+  file?: File,
+): Promise<HomepageBanner> {
+  return apiRequest(`/admin/settings/banners${file ? '/with-image' : ''}`, {
+    method: 'POST',
+    body: file ? bannerForm(input, file) : input,
+  });
 }
 
 export function updateHomepageBanner(
   id: string,
   input: Partial<HomepageBannerWriteInput>,
+  file?: File,
 ): Promise<HomepageBanner> {
-  return apiRequest(`/admin/settings/banners/${encodeURIComponent(id)}`, {
-    method: 'PATCH',
-    body: input,
-  });
+  return apiRequest(
+    `/admin/settings/banners/${encodeURIComponent(id)}${file ? '/with-image' : ''}`,
+    {
+      method: 'PATCH',
+      body: file ? bannerForm(input, file) : input,
+    },
+  );
 }
 
 export function deleteHomepageBanner(id: string): Promise<void> {
   return apiRequest(`/admin/settings/banners/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
-export function uploadHomepageBannerImage(file: File): Promise<{
-  publicId: string;
-  secureUrl: string;
-}> {
+function bannerForm(input: Partial<HomepageBannerWriteInput>, file: File): FormData {
   const form = new FormData();
+  form.set('data', JSON.stringify(input));
   form.set('file', file);
-  return apiRequest('/admin/settings/banner-images', { method: 'POST', body: form });
+  return form;
 }
 
 export function listContactMessages(input: {

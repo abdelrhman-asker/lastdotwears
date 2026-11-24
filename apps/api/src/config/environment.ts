@@ -43,6 +43,8 @@ export const environmentSchema = z
       .transform((value) => value.split(',').map((origin) => origin.trim()))
       .pipe(z.array(z.url()).min(1)),
     COOKIE_SECRET: z.string().min(32),
+    ADMIN_SETUP_ENABLED: booleanFromString.default(false),
+    ADMIN_SETUP_SECRET: optionalNonEmptyString,
     JWT_ACCESS_SECRET: z.string().min(64),
     JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
     JWT_ISSUER: z.string().trim().min(1).default('egypt-fashion-api'),
@@ -63,6 +65,10 @@ export const environmentSchema = z
     SMTP_SECURE: booleanFromString.default(false),
     SMTP_USER: optionalNonEmptyString,
     SMTP_PASSWORD: optionalNonEmptyString,
+    STORAGE_PROVIDER: z.enum(['local', 'cloudinary']).default('local'),
+    CLOUDINARY_CLOUD_NAME: optionalNonEmptyString,
+    CLOUDINARY_API_KEY: optionalNonEmptyString,
+    CLOUDINARY_API_SECRET: optionalNonEmptyString,
     UPLOAD_ROOT: z.string().trim().min(1).default('./uploads'),
     PRODUCT_IMAGE_MAX_BYTES: z.coerce
       .number()
@@ -92,6 +98,41 @@ export const environmentSchema = z
     RATE_LIMIT_LIMIT: z.coerce.number().int().positive().default(100),
   })
   .superRefine((environment, context) => {
+    if (
+      environment.ADMIN_SETUP_ENABLED &&
+      !/^[a-f0-9]{64}$/iu.test(environment.ADMIN_SETUP_SECRET ?? '')
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['ADMIN_SETUP_SECRET'],
+        message: 'Requires a 64-character hexadecimal secret generated from 32 random bytes.',
+      });
+    }
+    if (environment.STORAGE_PROVIDER === 'cloudinary') {
+      for (const key of [
+        'CLOUDINARY_CLOUD_NAME',
+        'CLOUDINARY_API_KEY',
+        'CLOUDINARY_API_SECRET',
+      ] as const) {
+        if (!environment[key]) {
+          context.addIssue({
+            code: 'custom',
+            path: [key],
+            message: 'Required for Cloudinary storage.',
+          });
+        }
+      }
+      if (
+        environment.CLOUDINARY_CLOUD_NAME &&
+        !/^[a-z0-9_-]+$/u.test(environment.CLOUDINARY_CLOUD_NAME)
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['CLOUDINARY_CLOUD_NAME'],
+          message: 'Invalid Cloudinary cloud name.',
+        });
+      }
+    }
     if (environment.NODE_ENV === 'production' && environment.MAIL_TRANSPORT !== 'smtp') {
       context.addIssue({
         code: 'custom',

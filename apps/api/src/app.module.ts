@@ -42,7 +42,9 @@ const requestIdPattern = /^[a-zA-Z0-9._-]{1,80}$/;
         pinoHttp: {
           level: configService.getOrThrow<string>('LOG_LEVEL'),
           autoLogging: {
-            ignore: (request) => request.url === '/api/v1/health/live',
+            ignore: (request) =>
+              request.url === '/api/v1/health/live' ||
+              /\/admin\/setup(?:\/status)?\/?(?:\?|$)/iu.test(request.url ?? ''),
           },
           genReqId: (request, response) => {
             const header = request.headers['x-request-id'];
@@ -62,6 +64,8 @@ const requestIdPattern = /^[a-zA-Z0-9._-]{1,80}$/;
               'res.headers.set-cookie',
               'req.body.password',
               'req.body.passwordConfirmation',
+              'req.body.confirmPassword',
+              'req.body.setupSecret',
               'req.body.token',
             ],
             remove: true,

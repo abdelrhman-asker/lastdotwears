@@ -26,6 +26,16 @@ export async function createApplication() {
 
   expressApp.set('trust proxy', 1);
 
+  // Gate setup before the global guards and request body validation.
+  expressApp.use(`/${apiPrefix}/admin/setup`, (_request, response, next) => {
+    response.set('Cache-Control', 'no-store');
+    if (!configService.getOrThrow<boolean>('ADMIN_SETUP_ENABLED')) {
+      response.status(404).json({ status: 404, detail: 'Administrator setup is unavailable.' });
+      return;
+    }
+    next();
+  });
+
   app.enableCors({
     origin: corsOrigins,
     credentials: true,

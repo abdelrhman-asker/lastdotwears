@@ -1,5 +1,3 @@
-import { createReadStream } from 'node:fs';
-
 import {
   Controller,
   Get,
@@ -7,7 +5,7 @@ import {
   Post,
   Query,
   Res,
-  StreamableFile,
+  type StreamableFile,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -21,6 +19,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
+
+import { streamPaymentProof } from '../../uploads/utils/payment-proof-response.util.js';
 
 import { CurrentUser } from '../../../common/decorators/current-user.decorator.js';
 import { Roles } from '../../../common/decorators/roles.decorator.js';
@@ -78,12 +78,7 @@ export class OrdersController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<StreamableFile> {
     const image = await this.service.customerPaymentProof(user.id, orderNumber);
-    response.set({
-      'Cache-Control': 'private, no-store',
-      'Content-Length': String(image.bytes),
-      'Content-Type': image.contentType,
-    });
-    return new StreamableFile(createReadStream(image.path));
+    return streamPaymentProof(image, response);
   }
 
   @Get(':orderNumber')

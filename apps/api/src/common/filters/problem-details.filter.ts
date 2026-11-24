@@ -53,11 +53,16 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     const status = exception instanceof HttpException ? exception.getStatus() : 500;
     const exceptionResponse =
       exception instanceof HttpException ? exception.getResponse() : undefined;
+    const setupRequest = /\/admin\/setup(?:\/status)?\/?(?:\?|$)/iu.test(request.originalUrl);
     const messages = this.extractMessages(exceptionResponse);
+    if (setupRequest && status === 400) {
+      // JSON parser diagnostics may quote part of the submitted body.
+      messages.splice(0, messages.length, 'Check the administrator setup form and try again.');
+    }
 
     if (status >= 500) {
       const stack = exception instanceof Error ? exception.stack : undefined;
-      this.logger.error('Unhandled request error', stack);
+      this.logger.error('Unhandled request error', setupRequest ? undefined : stack);
     }
 
     const problem: ProblemDetails = {
@@ -66,7 +71,9 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       status,
       detail:
         status >= 500 ? 'An unexpected error occurred.' : (messages[0] ?? statusTitle(status)),
-      instance: request.originalUrl,
+      instance: setupRequest
+        ? (request.originalUrl.split('?')[0] ?? request.path)
+        : request.originalUrl,
       requestId: request.id,
       timestamp: new Date().toISOString(),
       ...(messages.length > 1 ? { errors: messages } : {}),

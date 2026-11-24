@@ -1,3 +1,5 @@
+import type { Readable } from 'node:stream';
+
 export const MAIL_SERVICE = Symbol('MAIL_SERVICE');
 
 export interface MailRecipient {
@@ -32,7 +34,7 @@ export interface OrderMailDetails {
 }
 
 export interface OrderReceiptAttachment {
-  path: string;
+  stream: Readable;
   contentType: string;
 }
 

@@ -15,6 +15,41 @@ const validEnvironment = {
 };
 
 describe('validateEnvironment', () => {
+  it('keeps admin setup disabled by default and requires a strong secret when enabled', () => {
+    expect(validateEnvironment(validEnvironment).ADMIN_SETUP_ENABLED).toBe(false);
+    expect(() => validateEnvironment({ ...validEnvironment, ADMIN_SETUP_ENABLED: 'true' })).toThrow(
+      'ADMIN_SETUP_SECRET',
+    );
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        ADMIN_SETUP_ENABLED: 'true',
+        ADMIN_SETUP_SECRET: 'weak',
+      }),
+    ).toThrow('ADMIN_SETUP_SECRET');
+    expect(
+      validateEnvironment({
+        ...validEnvironment,
+        ADMIN_SETUP_ENABLED: 'true',
+        ADMIN_SETUP_SECRET: '12ab'.repeat(16),
+      }).ADMIN_SETUP_ENABLED,
+    ).toBe(true);
+  });
+  it('requires Cloudinary credentials only when using Cloudinary', () => {
+    expect(validateEnvironment(validEnvironment).STORAGE_PROVIDER).toBe('local');
+    expect(() =>
+      validateEnvironment({ ...validEnvironment, STORAGE_PROVIDER: 'cloudinary' }),
+    ).toThrow(/CLOUDINARY_CLOUD_NAME.*CLOUDINARY_API_KEY.*CLOUDINARY_API_SECRET/u);
+    expect(
+      validateEnvironment({
+        ...validEnvironment,
+        STORAGE_PROVIDER: 'cloudinary',
+        CLOUDINARY_CLOUD_NAME: 'test-cloud',
+        CLOUDINARY_API_KEY: 'test-key',
+        CLOUDINARY_API_SECRET: 'test-secret',
+      }).STORAGE_PROVIDER,
+    ).toBe('cloudinary');
+  });
   it('coerces supported values and applies defaults', () => {
     expect(
       validateEnvironment({

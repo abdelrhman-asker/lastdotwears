@@ -10,7 +10,10 @@ import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 
-import { SKIP_CSRF_KEY } from '../../../common/decorators/skip-csrf.decorator.js';
+import {
+  REQUIRE_CSRF_TOKEN_KEY,
+  SKIP_CSRF_KEY,
+} from '../../../common/decorators/skip-csrf.decorator.js';
 import {
   ACCESS_TOKEN_COOKIE,
   CSRF_TOKEN_COOKIE,
@@ -48,7 +51,11 @@ export class CsrfGuard implements CanActivate {
     const usesCookieAuthentication =
       Boolean(readCookie(request, ACCESS_TOKEN_COOKIE)) ||
       Boolean(readCookie(request, REFRESH_TOKEN_COOKIE));
-    if (!usesCookieAuthentication) {
+    const requireToken = this.reflector.getAllAndOverride<boolean>(REQUIRE_CSRF_TOKEN_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (!usesCookieAuthentication && !requireToken) {
       return true;
     }
 
@@ -60,7 +67,7 @@ export class CsrfGuard implements CanActivate {
       return true;
     }
 
-    if (this.isTrustedBrowserRequest(request)) {
+    if (!requireToken && this.isTrustedBrowserRequest(request)) {
       return true;
     }
 

@@ -24,10 +24,13 @@ const settings: WebsiteSettingsRecord = {
   updatedAt: new Date('2026-01-01T00:00:00Z'),
 };
 
-function service(repository: Partial<SettingsRepository>): SettingsService {
+function service(
+  repository: Partial<SettingsRepository>,
+  storage: Partial<ImageStorage> = {},
+): SettingsService {
   return new SettingsService(
     repository as SettingsRepository,
-    {} as ImageStorage,
+    storage as ImageStorage,
     {
       getOrThrow: (key: string) =>
         ({
@@ -42,6 +45,49 @@ function service(repository: Partial<SettingsRepository>): SettingsService {
 }
 
 describe('SettingsService', () => {
+  const banner = {
+    title: 'Campaign',
+    imageUrl: '/images/campaign.jpg',
+    altText: 'Campaign photo',
+    ctaLabel: 'Shop now',
+    ctaUrl: '/products',
+  };
+  const stored = {
+    publicId: 'lastdot/banners/fixture',
+    secureUrl: 'https://res.cloudinary.com/fixture-cloud/image/upload/fixture',
+    width: 100,
+    height: 100,
+    format: 'png',
+    bytes: 100,
+  };
+
+  it('cleans up the new banner asset when persistence fails', async () => {
+    const deleted: string[] = [];
+    const subject = service(
+      {
+        createBanner: () => Promise.reject(new Error('Database write failed')),
+        isBannerImageInUse: () => Promise.resolve(false),
+      },
+      {
+        uploadBannerImage: () => Promise.resolve(stored),
+        deleteImage: (id, kind) => {
+          deleted.push(`${kind}:${id}`);
+          return Promise.resolve();
+        },
+      },
+    );
+    await expect(
+      subject.createBanner(banner, undefined, { buffer: Buffer.alloc(10) } as Express.Multer.File),
+    ).rejects.toThrow('Database write failed');
+    expect(deleted).toEqual([`banner:${stored.publicId}`]);
+  });
+
+  it('rejects attaching managed banner IDs from a JSON request', async () => {
+    await expect(
+      service({}).createBanner({ ...banner, imagePublicId: stored.publicId }),
+    ).rejects.toThrow('when saving the banner');
+  });
+
   it('rejects disabling every checkout payment method', async () => {
     const subject = service({ getSettings: () => Promise.resolve(settings) });
     await expect(

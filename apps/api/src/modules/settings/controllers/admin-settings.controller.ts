@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -10,6 +11,7 @@ import {
   Post,
   UploadedFile,
   UseInterceptors,
+  ValidationPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -37,6 +39,28 @@ import {
   WebsiteSettingsResponseDto,
 } from '../dto/settings.dto.js';
 import { SettingsService } from '../services/settings.service.js';
+
+const bannerFormValidation = new ValidationPipe({
+  transform: true,
+  whitelist: true,
+  forbidNonWhitelisted: true,
+});
+
+async function parseBannerForm<T>(value: unknown, metatype: new () => T): Promise<T> {
+  let parsed: unknown;
+  try {
+    if (typeof value === 'string') parsed = JSON.parse(value) as unknown;
+  } catch {
+    throw new BadRequestException('Invalid banner form data.');
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new BadRequestException('Invalid banner form data.');
+  }
+  return (await bannerFormValidation.transform(
+    { ...parsed, imageUrl: '/images/editorial-hero.png', imagePublicId: null },
+    { type: 'body', metatype },
+  )) as T;
+}
 
 @ApiTags('Admin Website Settings')
 @ApiBearerAuth()
@@ -128,6 +152,42 @@ export class AdminSettingsController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {
     return this.service.removeBanner(id, actor.id);
+  }
+
+  @Post('banners/with-image')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 20_000_000, files: 1, fields: 1 } }),
+  )
+  @ApiConsumes('multipart/form-data')
+  async createBannerWithImage(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Body('data') data: string,
+    @UploadedFile(ProductImageFilePipe) file: Express.Multer.File,
+  ): Promise<HomepageBannerResponseDto> {
+    return this.service.createBanner(
+      await parseBannerForm(data, CreateHomepageBannerDto),
+      actor.id,
+      file,
+    );
+  }
+
+  @Patch('banners/:id/with-image')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 20_000_000, files: 1, fields: 1 } }),
+  )
+  @ApiConsumes('multipart/form-data')
+  async updateBannerWithImage(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('data') data: string,
+    @UploadedFile(ProductImageFilePipe) file: Express.Multer.File,
+  ): Promise<HomepageBannerResponseDto> {
+    return this.service.updateBanner(
+      id,
+      await parseBannerForm(data, UpdateHomepageBannerDto),
+      actor.id,
+      file,
+    );
   }
 
   @Post('banner-images')

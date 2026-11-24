@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { createReadStream } from 'node:fs';
 import { mkdir, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -7,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 
 import type {
   ImageStorage,
+  MediaKind,
   StoredImage,
   StoredImageFile,
 } from '../interfaces/image-storage.interface.js';
@@ -15,6 +17,14 @@ import {
   inspectImage,
   type SupportedImageFormat,
 } from '../utils/image-metadata.util.js';
+
+const owner = '(?:[a-f0-9-]{36}|[a-f0-9]{64})';
+const filename = '[a-f0-9-]{36}\\.(?:jpeg|png|webp|avif)';
+const localMediaPatterns: Record<MediaKind, RegExp> = {
+  product: new RegExp(`^products/[a-f0-9-]{36}/${filename}$`, 'u'),
+  banner: new RegExp(`^banners/${filename}$`, 'u'),
+  receipt: new RegExp(`^payment-proofs/${owner}/${filename}$`, 'u'),
+};
 
 @Injectable()
 export class LocalImageStorageService implements ImageStorage {
@@ -38,7 +48,8 @@ export class LocalImageStorageService implements ImageStorage {
     return this.upload(buffer, `payment-proofs/${userId}`);
   }
 
-  async deleteImage(publicId: string): Promise<void> {
+  async deleteImage(publicId: string, kind: MediaKind): Promise<void> {
+    if (!localMediaPatterns[kind].test(publicId)) return;
     const filePath = this.resolvePublicId(publicId);
     try {
       await unlink(filePath);
@@ -48,6 +59,18 @@ export class LocalImageStorageService implements ImageStorage {
   }
 
   async readImage(publicId: string): Promise<StoredImageFile | null> {
+    if (!localMediaPatterns.product.test(publicId) && !localMediaPatterns.banner.test(publicId)) {
+      return null;
+    }
+    return this.openImage(publicId);
+  }
+
+  async readPaymentProof(publicId: string): Promise<StoredImageFile | null> {
+    if (!localMediaPatterns.receipt.test(publicId)) return null;
+    return this.openImage(publicId);
+  }
+
+  private async openImage(publicId: string): Promise<StoredImageFile | null> {
     const format = path.extname(publicId).slice(1).toLowerCase() as SupportedImageFormat;
     const contentType = imageContentTypes[format];
     if (!contentType) return null;
@@ -56,7 +79,7 @@ export class LocalImageStorageService implements ImageStorage {
     try {
       const file = await stat(filePath);
       if (!file.isFile()) return null;
-      return { path: filePath, contentType, bytes: file.size };
+      return { stream: createReadStream(filePath), contentType, bytes: file.size };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
       throw error;

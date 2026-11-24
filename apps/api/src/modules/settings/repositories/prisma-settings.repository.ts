@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { hasPrismaCode } from '../../../common/utils/prisma-error.util.js';
 
 import { PrismaService } from '../../../database/prisma/prisma.service.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
@@ -83,13 +84,30 @@ export class PrismaSettingsRepository implements SettingsRepository {
   async updateBanner(
     id: string,
     input: Partial<HomepageBannerWriteInput>,
+    expectedUpdatedAt: Date,
   ): Promise<HomepageBannerRecord | null> {
-    const result = await this.prisma.homepageBanner.updateMany({ where: { id }, data: input });
-    return result.count === 1 ? this.findBanner(id) : null;
+    try {
+      return await this.prisma.homepageBanner.update({
+        where: { id, updatedAt: expectedUpdatedAt },
+        data: input,
+      });
+    } catch (error) {
+      if (hasPrismaCode(error, 'P2025')) return null;
+      throw error;
+    }
   }
 
-  async deleteBanner(id: string): Promise<boolean> {
-    return (await this.prisma.homepageBanner.deleteMany({ where: { id } })).count === 1;
+  async deleteBanner(id: string): Promise<HomepageBannerRecord | null> {
+    try {
+      return await this.prisma.homepageBanner.delete({ where: { id } });
+    } catch (error) {
+      if (hasPrismaCode(error, 'P2025')) return null;
+      throw error;
+    }
+  }
+
+  async isBannerImageInUse(publicId: string): Promise<boolean> {
+    return (await this.prisma.homepageBanner.count({ where: { imagePublicId: publicId } })) > 0;
   }
 
   async recordAudit(

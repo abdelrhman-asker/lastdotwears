@@ -1,6 +1,7 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { buffer as readStream } from 'node:stream/consumers';
 
 import type { ConfigService } from '@nestjs/config';
 
@@ -53,10 +54,10 @@ describe('LocalImageStorageService', () => {
 
     const image = await service.readImage(stored.publicId);
     expect(image).not.toBeNull();
-    expect(await readFile(image!.path)).toEqual(buffer);
+    expect(await readStream(image!.stream)).toEqual(buffer);
     expect(image).toMatchObject({ contentType: 'image/png', bytes: buffer.length });
 
-    await service.deleteImage(stored.publicId);
+    await service.deleteImage(stored.publicId, 'product');
     await expect(service.readImage(stored.publicId)).resolves.toBeNull();
   });
 
@@ -68,8 +69,17 @@ describe('LocalImageStorageService', () => {
   });
 
   it('prevents paths from escaping the upload root', async () => {
-    await expect(service.readImage('../outside.png')).rejects.toThrow(
-      'Invalid stored image identifier',
+    await expect(service.readImage('../outside.png')).resolves.toBeNull();
+  });
+
+  it('keeps local payment proofs out of the public reader', async () => {
+    const stored = await service.uploadPaymentProof(
+      png(2, 3),
+      '94a65897-2462-4eec-b05f-e68ec839989e',
     );
+    await expect(service.readImage(stored.publicId)).resolves.toBeNull();
+    await service.deleteImage(stored.publicId, 'banner');
+    const proof = await service.readPaymentProof(stored.publicId);
+    expect(await readStream(proof!.stream)).toEqual(png(2, 3));
   });
 });

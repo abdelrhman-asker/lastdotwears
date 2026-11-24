@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream';
+
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface.js';
 import type { InstaPayService } from '../../payments/services/instapay.service.js';
 import type { MailService } from '../../mail/interfaces/mail-service.interface.js';
@@ -106,7 +108,8 @@ describe('OrdersService', () => {
       },
     };
     const emailedOrders: OrderRecord[] = [];
-    const emailedReceipts: Array<{ path: string; contentType: string } | undefined> = [];
+    const stream = Readable.from([Buffer.from('receipt')]);
+    const emailedReceipts: Array<{ stream: Readable; contentType: string } | undefined> = [];
     const repository = {
       findCustomerOrder: () => Promise.resolve(current),
       submitInstaPayProof: () => Promise.resolve(submitted),
@@ -122,9 +125,9 @@ describe('OrdersService', () => {
           bytes: 100,
         }),
       deleteImage: () => Promise.resolve(),
-      readImage: () =>
+      readPaymentProof: () =>
         Promise.resolve({
-          path: 'D:/receipts/receipt.png',
+          stream,
           contentType: 'image/png',
           bytes: 100,
         }),
@@ -144,7 +147,7 @@ describe('OrdersService', () => {
       {
         sendOrderReceivedEmail: (
           emailedOrder: OrderRecord,
-          receipt?: { path: string; contentType: string },
+          receipt?: { stream: Readable; contentType: string },
         ) => {
           emailedOrders.push(emailedOrder);
           emailedReceipts.push(receipt);
@@ -163,9 +166,29 @@ describe('OrdersService', () => {
     });
     expect(response.payment).not.toHaveProperty('proofImagePublicId');
     expect(emailedOrders).toEqual([submitted]);
-    expect(emailedReceipts).toEqual([
-      { path: 'D:/receipts/receipt.png', contentType: 'image/png', bytes: 100 },
-    ]);
+    expect(emailedReceipts).toEqual([{ stream, contentType: 'image/png', bytes: 100 }]);
+  });
+
+  it('does not read receipt storage for customers or guests who do not own the order', async () => {
+    let read = false;
+    const repository = {
+      findCustomerOrder: () => Promise.resolve(null),
+      findShopperOrder: () => Promise.resolve(null),
+    } as unknown as OrdersRepository;
+    const storage = {
+      readPaymentProof: () => {
+        read = true;
+        return Promise.resolve(null);
+      },
+    } as unknown as ImageStorage;
+    const service = new OrdersService(repository, {} as InstaPayService, mail, storage);
+    await expect(service.customerPaymentProof('wrong-customer', 'LDW-1')).rejects.toThrow(
+      'Order not found',
+    );
+    await expect(
+      service.shopperPaymentProof({ guestTokenHash: 'wrong-guest' }, 'LDW-1'),
+    ).rejects.toThrow('Order not found');
+    expect(read).toBe(false);
   });
 
   it('removes a newly uploaded receipt when proof persistence conflicts', async () => {

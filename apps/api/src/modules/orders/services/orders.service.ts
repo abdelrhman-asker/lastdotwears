@@ -147,22 +147,30 @@ export class OrdersService {
         );
       }
       committed = true;
-      const receipt = await this.imageStorage.readImage(stored.publicId).catch((error: unknown) => {
-        this.logger.error(
-          `Transfer receipt could not be attached for ${result.orderNumber}: ${mailErrorDetails(error)}`,
-        );
-        return null;
-      });
+      const receipt = await this.imageStorage
+        .readPaymentProof(stored.publicId)
+        .catch((error: unknown) => {
+          this.logger.error(
+            `Transfer receipt could not be attached for ${result.orderNumber}: ${mailErrorDetails(error)}`,
+          );
+          return null;
+        });
       await this.mailService
         .sendOrderReceivedEmail(result, receipt ?? undefined)
         .catch((error: unknown) =>
           this.logger.error(
             `Order received email failed for ${result.orderNumber}: ${mailErrorDetails(error)}`,
           ),
-        );
+        )
+        .finally(() => {
+          receipt?.stream.destroy();
+        });
       return this.toResponse(result);
     } finally {
-      if (!committed) await this.imageStorage.deleteImage(stored.publicId).catch(() => undefined);
+      if (!committed)
+        await this.imageStorage.deleteImage(stored.publicId, 'receipt').catch(() => {
+          this.logger.error('Transfer receipt cleanup failed.');
+        });
     }
   }
 
@@ -281,7 +289,7 @@ export class OrdersService {
     if (!order.payment.proofImagePublicId) {
       throw new NotFoundException('Transfer receipt not found.');
     }
-    const image = await this.imageStorage.readImage(order.payment.proofImagePublicId);
+    const image = await this.imageStorage.readPaymentProof(order.payment.proofImagePublicId);
     if (!image) throw new NotFoundException('Transfer receipt not found.');
     return image;
   }

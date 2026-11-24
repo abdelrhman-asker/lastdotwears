@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import Image from 'next/image';
+import Image from '@/components/shared/media-image';
 import Link from 'next/link';
 import { useRef, useState, type FormEvent } from 'react';
 import { useForm } from 'react-hook-form';

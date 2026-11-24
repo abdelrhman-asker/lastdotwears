@@ -1,5 +1,3 @@
-import { createReadStream } from 'node:fs';
-
 import {
   Controller,
   Get,
@@ -48,7 +46,7 @@ export class UploadsController {
     const image = await this.imageStorage.readImage(publicId);
     if (!image) throw new NotFoundException('Image not found.');
 
-    return new StreamableFile(createReadStream(image.path), {
+    return new StreamableFile(image.stream, {
       type: image.contentType,
       length: image.bytes,
     });

@@ -51,6 +51,25 @@ export const resetPasswordSchema = z
     path: ['confirmPassword'],
   });
 
+export const adminSetupEmail = 'lastdotwears@gmail.com';
+
+export const adminSetupSchema = z
+  .object({
+    email: email.refine(
+      (value): boolean => value === adminSetupEmail,
+      'Use the designated administrator email.',
+    ),
+    password,
+    confirmPassword: z.string(),
+    setupSecret: z.string().regex(/^[a-f0-9]{64}$/iu, 'Enter the 64-character setup secret.'),
+  })
+  .refine((input) => input.password === input.confirmPassword, {
+    message: 'Passwords do not match.',
+    path: ['confirmPassword'],
+  });
+
+export type AdminSetupInput = z.infer<typeof adminSetupSchema>;
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterFormInput = z.infer<typeof registerSchema>;
 export type RegisterInput = Omit<RegisterFormInput, 'confirmPassword' | 'phone'> & {

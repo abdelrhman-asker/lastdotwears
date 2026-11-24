@@ -1,3 +1,5 @@
+import type { Readable } from 'node:stream';
+
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import nodemailer, { type Transporter } from 'nodemailer';
@@ -113,7 +115,7 @@ export class TransactionalMailService implements MailService {
             attachments: [
               {
                 filename: `receipt-${order.orderNumber}.${this.extensionFor(receipt.contentType)}`,
-                path: receipt.path,
+                content: receipt.stream,
                 contentType: receipt.contentType,
                 cid: 'payment-receipt@last-dot',
               },
@@ -203,7 +205,7 @@ export class TransactionalMailService implements MailService {
     completeHtml?: boolean;
     attachments?: Array<{
       filename: string;
-      path: string;
+      content: Readable;
       contentType: string;
       cid: string;
     }>;

@@ -1,5 +1,3 @@
-import { createReadStream } from 'node:fs';
-
 import {
   Body,
   Controller,
@@ -9,7 +7,7 @@ import {
   Post,
   Req,
   Res,
-  StreamableFile,
+  type StreamableFile,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -17,6 +15,8 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
+
+import { streamPaymentProof } from '../../uploads/utils/payment-proof-response.util.js';
 
 import { OptionalCurrentUser } from '../../../common/decorators/optional-current-user.decorator.js';
 import { Public } from '../../../common/decorators/public.decorator.js';
@@ -134,11 +134,6 @@ export class CheckoutController {
   ): Promise<StreamableFile> {
     const owner = this.identity.resolve(request, response, user, GUEST_CART_COOKIE, false);
     const image = await this.orders.shopperPaymentProof(owner, orderNumber);
-    response.set({
-      'Cache-Control': 'private, no-store',
-      'Content-Length': String(image.bytes),
-      'Content-Type': image.contentType,
-    });
-    return new StreamableFile(createReadStream(image.path));
+    return streamPaymentProof(image, response);
   }
 }

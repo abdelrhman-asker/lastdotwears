@@ -12,6 +12,30 @@ import type {
 import type { ProductRecord } from '../interfaces/product.interface.js';
 import { ProductsService } from './products.service.js';
 
+it('cleans up a newly uploaded asset when the catalog write fails', async () => {
+  const publicId = 'lastdot/products/product/image';
+  const deleted: string[] = [];
+  const subject = new ProductsService(
+    {
+      findById: () => Promise.resolve({ id: 'product' }),
+      createImage: () => Promise.reject(new Error('Image row write failed')),
+    } as unknown as ProductsRepository,
+    {
+      uploadProductImage: () => Promise.resolve({ publicId }),
+      deleteImage: (id: string, kind: string) => {
+        deleted.push(`${kind}:${id}`);
+        return Promise.resolve();
+      },
+    } as ImageStorage,
+  );
+  await expect(
+    subject.uploadImage('product', { buffer: Buffer.alloc(10) } as Express.Multer.File, {
+      altText: 'Product photo',
+    }),
+  ).rejects.toThrow('Image row write failed');
+  expect(deleted).toEqual([`product:${publicId}`]);
+});
+
 const actor: AuthenticatedUser = {
   id: 'f8da524c-4d39-4712-9945-895eccde0d21',
   sessionId: '264af772-71bf-4af5-9038-c996be72dd9b',

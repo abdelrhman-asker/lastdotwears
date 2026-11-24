@@ -151,6 +151,17 @@ describe('Health endpoints (e2e)', () => {
       });
   });
 
+  it('keeps payment proofs behind the existing shopper and admin routes', async () => {
+    await request(httpServer).get('/api/v1/orders/LDW-1/payment-proof').expect(401);
+    await request(httpServer)
+      .get('/api/v1/admin/orders/00000000-0000-4000-8000-000000000000/payment-proof')
+      .expect(401);
+    await request(httpServer).get('/api/v1/checkout/orders/LDW-1/payment-proof').expect(404);
+    await request(httpServer)
+      .get('/api/v1/uploads/payment-proofs/00000000-0000-4000-8000-000000000000.png')
+      .expect(404);
+  });
+
   it('rejects invalid catalog pagination before accessing PostgreSQL', async () => {
     await request(httpServer)
       .get('/api/v1/products?limit=1000')

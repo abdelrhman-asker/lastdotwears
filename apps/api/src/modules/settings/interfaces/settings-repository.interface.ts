@@ -26,7 +26,9 @@ export interface SettingsRepository {
   updateBanner(
     id: string,
     input: Partial<HomepageBannerWriteInput>,
+    expectedUpdatedAt: Date,
   ): Promise<HomepageBannerRecord | null>;
-  deleteBanner(id: string): Promise<boolean>;
+  deleteBanner(id: string): Promise<HomepageBannerRecord | null>;
+  isBannerImageInUse(publicId: string): Promise<boolean>;
   recordAudit(actorId: string, action: string, metadata: Record<string, unknown>): Promise<void>;
 }

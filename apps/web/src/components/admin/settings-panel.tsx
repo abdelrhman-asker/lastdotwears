@@ -18,7 +18,6 @@ import {
   updateAdminSettings,
   updateHomepageBanner,
   updateSocialLink,
-  uploadHomepageBannerImage,
 } from '@/lib/api/admin';
 import { errorMessage } from '@/lib/api/http-client';
 import type {
@@ -323,8 +322,15 @@ function BannersEditor() {
   const query = useQuery({ queryKey: bannersKey, queryFn: listHomepageBanners, retry: false });
   const [editing, setEditing] = useState<'new' | HomepageBanner | null>(null);
   const save = useMutation({
-    mutationFn: ({ id, input }: { id?: string; input: HomepageBannerWriteInput }) =>
-      id ? updateHomepageBanner(id, input) : createHomepageBanner(input),
+    mutationFn: ({
+      id,
+      input,
+      file,
+    }: {
+      id?: string;
+      input: HomepageBannerWriteInput;
+      file?: File;
+    }) => (id ? updateHomepageBanner(id, input, file) : createHomepageBanner(input, file)),
     onSuccess: () => {
       setEditing(null);
       void queryClient.invalidateQueries({ queryKey: bannersKey });
@@ -341,11 +347,14 @@ function BannersEditor() {
     >
       {editing ? (
         <BannerEditor
+          key={editing === 'new' ? 'new' : editing.id}
           banner={editing === 'new' ? null : editing}
           error={save.error}
           pending={save.isPending}
           onCancel={() => setEditing(null)}
-          onSave={(input) => save.mutate({ id: editing === 'new' ? undefined : editing.id, input })}
+          onSave={(input, file) =>
+            save.mutate({ id: editing === 'new' ? undefined : editing.id, input, file })
+          }
         />
       ) : null}
       <QueryState query={query} loading="Loading homepage banners…" />
@@ -391,7 +400,7 @@ function BannerEditor({
   pending: boolean;
   error: unknown;
   onCancel: () => void;
-  onSave: (input: HomepageBannerWriteInput) => void;
+  onSave: (input: HomepageBannerWriteInput, file?: File) => void;
 }) {
   const [value, setValue] = useState<HomepageBannerWriteInput>({
     eyebrow: banner?.eyebrow ?? '',
@@ -407,15 +416,7 @@ function BannerEditor({
     startsAt: toLocalDateTime(banner?.startsAt),
     endsAt: toLocalDateTime(banner?.endsAt),
   });
-  const upload = useMutation({
-    mutationFn: uploadHomepageBannerImage,
-    onSuccess: (image) =>
-      setValue((current) => ({
-        ...current,
-        imageUrl: image.secureUrl,
-        imagePublicId: image.publicId,
-      })),
-  });
+  const [file, setFile] = useState<File>();
   const set = <K extends keyof HomepageBannerWriteInput>(
     key: K,
     next: HomepageBannerWriteInput[K],
@@ -425,19 +426,20 @@ function BannerEditor({
       className="mb-7 bg-stone-50 p-5"
       onSubmit={(event) => {
         event.preventDefault();
-        onSave({
-          ...value,
-          eyebrow: value.eyebrow || null,
-          description: value.description || null,
-          imagePublicId: value.imagePublicId || null,
-          startsAt: fromLocalDateTime(value.startsAt),
-          endsAt: fromLocalDateTime(value.endsAt),
-        });
+        onSave(
+          {
+            ...value,
+            eyebrow: value.eyebrow || null,
+            description: value.description || null,
+            imagePublicId: value.imagePublicId || null,
+            startsAt: fromLocalDateTime(value.startsAt),
+            endsAt: fromLocalDateTime(value.endsAt),
+          },
+          file,
+        );
       }}
     >
-      {error || upload.error ? (
-        <StatusMessage tone="error">{errorMessage(error ?? upload.error)}</StatusMessage>
-      ) : null}
+      {error ? <StatusMessage tone="error">{errorMessage(error)}</StatusMessage> : null}
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <Label text="Eyebrow">
           <Input
@@ -467,7 +469,8 @@ function BannerEditor({
         </Label>
         <Label text="Image URL">
           <Input
-            required
+            required={!file}
+            disabled={Boolean(file)}
             value={value.imageUrl}
             onChange={(event) => set('imageUrl', event.target.value)}
           />
@@ -475,11 +478,11 @@ function BannerEditor({
         <Label text="Upload image">
           <Input
             accept="image/jpeg,image/png,image/webp,image/avif"
-            disabled={upload.isPending}
+            disabled={pending}
             type="file"
             onChange={(event) => {
               const file = event.target.files?.[0];
-              if (file) upload.mutate(file);
+              setFile(file);
             }}
           />
         </Label>
@@ -529,7 +532,7 @@ function BannerEditor({
         Banner is active
       </label>
       <div className="mt-5 flex gap-3">
-        <Button disabled={pending || upload.isPending} type="submit">
+        <Button disabled={pending} type="submit">
           Save banner
         </Button>
         <Button onClick={onCancel} type="button" variant="ghost">

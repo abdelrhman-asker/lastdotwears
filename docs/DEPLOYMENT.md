@@ -33,6 +33,7 @@ Set these build arguments on the web service:
 NEXT_PUBLIC_SITE_URL=https://www.last-dot.com
 NEXT_PUBLIC_API_URL=https://api.last-dot.com/api/v1
 NEXT_PUBLIC_CONTACT_EMAIL=support@last-dot.com
+NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=<same-cloud-name-as-the-API>
 NEXT_PUBLIC_ANALYTICS_ENABLED=false
 NEXT_PUBLIC_POSTHOG_KEY=
 NEXT_PUBLIC_POSTHOG_HOST=https://eu.i.posthog.com
@@ -56,9 +57,81 @@ Use `/api/v1/health/live` for API liveness, `/api/v1/health/ready` for API readi
 HTTP 200 on `/api/v1/health/live` to test the rewrite. Add the generated web origin to
 `CORS_ORIGINS` only if browser smoke tests use it. Keep authenticated API traffic uncached.
 
-Mount persistent storage at `/app/uploads` before enabling uploads and verify the mount is
-writable by the container's `node` user. Restore any old upload files with their relative
-paths intact. A database backup contains upload metadata only.
+### One-time administrator setup
+
+The API defaults to `ADMIN_SETUP_ENABLED=false` with no `ADMIN_SETUP_SECRET`. To open setup
+temporarily, set `ADMIN_SETUP_ENABLED=true` and set `ADMIN_SETUP_SECRET` to 64 hexadecimal
+characters generated from 32 random bytes, for example with `openssl rand -hex 32`. Store
+the value in Northflank's API runtime secrets. Include the storefront origin in `CORS_ORIGINS`.
+
+Deploy the updated API and web services, then open `https://www.last-dot.com/admin/setup`.
+Use `lastdotwears@gmail.com` after confirming you control that mailbox. A different existing
+administrator is fine. An existing account with the intended email blocks setup. A successful
+submission redirects to `/admin/login`. Verify you can sign in, set `ADMIN_SETUP_ENABLED=false`,
+and remove `ADMIN_SETUP_SECRET` from the API runtime.
+
+The account and its completion audit event are committed together. Preserve the
+`ADMIN_SETUP_COMPLETED` audit row in backups and audit retention. It keeps the setup closed
+across replicas and restarts, even if the account is later removed.
+
+### Cloudinary media
+
+Set these **API runtime** variables in Northflank. Set the same cloud name in the web build
+arguments above and rebuild the web image before starting Cloudinary-backed uploads. The cloud
+name is public. Keep the API key and secret in the API service runtime secrets.
+
+```env
+STORAGE_PROVIDER=cloudinary
+CLOUDINARY_CLOUD_NAME=<cloud-name>
+CLOUDINARY_API_KEY=<api-key>
+CLOUDINARY_API_SECRET=<api-secret>
+UPLOAD_ROOT=/app/uploads
+PRODUCT_IMAGE_MAX_BYTES=8000000
+```
+
+`STORAGE_PROVIDER=local` remains the default for local development and Compose. Cloudinary
+mode writes new files to Cloudinary and can still read restored legacy files under `UPLOAD_ROOT`.
+Use a Cloudinary product environment with dynamic folders and reserve the `lastdot/` namespaces
+for this app. Keep public image delivery and on-demand transformations enabled for catalog media.
+
+Public assets use `lastdot/products/<product-id>` and `lastdot/banners`. The app stores HTTPS
+delivery URLs with one width limit per media kind (1200 px for products, 1600 px for banners),
+`q_auto`, and `f_auto`. The browser requests these optimized URLs directly so Next.js does
+not generate a second set of variants. Sizes around 100–200 KB are a target and vary by image
+and browser. Use appropriately sized source images and monitor actual delivery size and quota.
+
+Receipts use the authenticated delivery type under `lastdot/payment-proofs`. The API fetches
+short-lived signed downloads server-side after its existing owner or admin checks. Receipt
+responses use `private, no-store` and no Cloudinary URL is sent to the browser. Email attaches
+the same bytes as a stream. Keep all receipt assets on authenticated delivery.
+Keep the Cloudinary provider enabled once remote receipts exist so the API can continue to read them.
+
+Cloudinary Free shares 25 credits across storage, transformation generation, and bandwidth.
+One credit covers 1 GB of storage, 1 GB of image bandwidth, or 1,000 transformations. As a rough
+example, 1 GB stored, 500 generated variants, and 10,000 image views at 150 KB would use about
+3 credits. Browser format negotiation can create several cached formats per image. Originals,
+derived assets, retained versions, and receipts can add to usage. Review the dashboard before
+bulk recovery. See [Cloudinary billing and plans](https://cloudinary.com/documentation/billing_and_plans).
+
+### Recover older media
+
+1. Inventory broken rows from a database copy or approved read-only access. Keep product, banner,
+   and payment records intact. A database backup contains metadata, while the image bytes must
+   come from HidenCloud volume backups or available source files.
+2. To restore a legacy URL unchanged, mount a volume at `/app/uploads` and restore the original
+   directory tree, filenames, and permissions. Keep any legacy receipts off public paths.
+3. To move public images to Cloudinary, re-upload the originals in the existing product editor.
+   Set the replacement as primary and verify it before removing the broken image entry. For
+   banners, choose a replacement image and save the banner. Check old order snapshots separately,
+   since they can retain older URLs.
+4. If the original files are missing, leave the existing records in place until a replacement is
+   available. Review failed-cleanup logs and reconcile candidate orphan assets against the
+   database before deleting anything in Cloudinary. The legacy standalone banner upload endpoint
+   remains available for local storage. Cloudinary-backed banners upload as part of the save
+   request so cancelled drafts never create remote assets.
+
+After deploying, test a product and banner upload/replacement, then verify a receipt returns
+only through the authorized API route. An unsigned Cloudinary URL for the receipt should fail.
 
 For an approved migration, build a manual job from the same release using the API Dockerfile,
 context `/`, and target `migrator`. Inject the direct Neon URL as the job's `DATABASE_URL`.

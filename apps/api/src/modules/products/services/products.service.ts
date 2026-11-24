@@ -3,6 +3,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 
@@ -43,6 +44,8 @@ import type { ProductListQuery, ProductRecord } from '../interfaces/product.inte
 
 @Injectable()
 export class ProductsService {
+  private readonly logger = new Logger(ProductsService.name);
+
   constructor(
     @Inject(PRODUCTS_REPOSITORY) private readonly repository: ProductsRepository,
     @Inject(IMAGE_STORAGE) private readonly imageStorage: ImageStorage,
@@ -250,7 +253,9 @@ export class ProductsService {
         }),
       );
     } catch (error) {
-      await this.imageStorage.deleteImage(stored.publicId).catch(() => undefined);
+      await this.imageStorage.deleteImage(stored.publicId, 'product').catch(() => {
+        this.logger.error('Product image cleanup failed.');
+      });
       throw error;
     }
   }
@@ -270,10 +275,12 @@ export class ProductsService {
     await this.requireProduct(productId);
     const image = await this.repository.findImage(productId, imageId);
     if (!image) throw new NotFoundException('Product image not found.');
-    await this.imageStorage.deleteImage(image.publicId);
     if (!(await this.repository.deleteImage(productId, imageId))) {
       throw new NotFoundException('Product image not found.');
     }
+    await this.imageStorage.deleteImage(image.publicId, 'product').catch(() => {
+      this.logger.error('Product image cleanup failed after removing its catalog record.');
+    });
   }
 
   private async list(

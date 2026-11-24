@@ -180,7 +180,11 @@ export class SettingsService {
   async createBanner(
     input: CreateHomepageBannerDto,
     actorId?: string,
+    file?: Express.Multer.File,
   ): Promise<HomepageBannerResponseDto> {
+    if (!file && input.imagePublicId?.startsWith('lastdot/')) {
+      throw new BadRequestException('Upload a managed banner image when saving the banner.');
+    }
     const data: HomepageBannerWriteInput = {
       eyebrow: input.eyebrow || null,
       title: input.title,
@@ -196,7 +200,7 @@ export class SettingsService {
       endsAt: input.endsAt ? new Date(input.endsAt) : null,
     };
     this.assertBannerWindow(data.startsAt, data.endsAt);
-    const banner = await this.repository.createBanner(data);
+    const banner = await this.saveBannerImage(file, data, () => this.repository.createBanner(data));
     await this.audit(actorId, 'HOMEPAGE_BANNER_CREATED', { id: banner.id });
     return HomepageBannerResponseDto.from(banner);
   }
@@ -205,29 +209,79 @@ export class SettingsService {
     id: string,
     input: UpdateHomepageBannerDto,
     actorId?: string,
+    file?: Express.Multer.File,
   ): Promise<HomepageBannerResponseDto> {
     const current = await this.requireBanner(id);
     const data = this.updateBannerInput(input);
+    if (
+      !file &&
+      data.imagePublicId?.startsWith('lastdot/') &&
+      data.imagePublicId !== current.imagePublicId
+    ) {
+      throw new BadRequestException('Upload a managed banner image when saving the banner.');
+    }
+    if (
+      !file &&
+      data.imageUrl !== undefined &&
+      data.imageUrl !== current.imageUrl &&
+      (data.imagePublicId === undefined || data.imagePublicId === current.imagePublicId)
+    ) {
+      data.imagePublicId = null;
+    }
     this.assertBannerWindow(
       input.startsAt === undefined ? current.startsAt : data.startsAt,
       input.endsAt === undefined ? current.endsAt : data.endsAt,
     );
-    const banner = await this.repository.updateBanner(id, data);
-    if (!banner) throw new NotFoundException('Homepage banner not found.');
+    const banner = await this.saveBannerImage(file, data, async () => {
+      const updated = await this.repository.updateBanner(id, data, current.updatedAt);
+      if (!updated) throw new ConflictException('Homepage banner changed. Reload and try again.');
+      return updated;
+    });
+    if (current.imagePublicId && current.imagePublicId !== banner.imagePublicId) {
+      await this.deleteUnusedBannerImage(current.imagePublicId);
+    }
     await this.audit(actorId, 'HOMEPAGE_BANNER_UPDATED', { id, fields: Object.keys(input).sort() });
     return HomepageBannerResponseDto.from(banner);
   }
 
   uploadBannerImage(file: Express.Multer.File) {
+    if (this.config.get<string>('STORAGE_PROVIDER') === 'cloudinary') {
+      throw new BadRequestException('Upload the banner image when saving the banner.');
+    }
     return this.imageStorage.uploadBannerImage(file.buffer);
   }
 
   async removeBanner(id: string, actorId?: string): Promise<void> {
-    const banner = await this.requireBanner(id);
-    if (banner.imagePublicId) await this.imageStorage.deleteImage(banner.imagePublicId);
-    if (!(await this.repository.deleteBanner(id)))
-      throw new NotFoundException('Homepage banner not found.');
+    const banner = await this.repository.deleteBanner(id);
+    if (!banner) throw new NotFoundException('Homepage banner not found.');
+    if (banner.imagePublicId) await this.deleteUnusedBannerImage(banner.imagePublicId);
     await this.audit(actorId, 'HOMEPAGE_BANNER_DELETED', { id });
+  }
+
+  private async saveBannerImage<T>(
+    file: Express.Multer.File | undefined,
+    data: Partial<HomepageBannerWriteInput>,
+    save: () => Promise<T>,
+  ): Promise<T> {
+    if (!file) return save();
+    const image = await this.imageStorage.uploadBannerImage(file.buffer);
+    data.imagePublicId = image.publicId;
+    data.imageUrl = image.secureUrl;
+    try {
+      return await save();
+    } catch (error) {
+      await this.deleteUnusedBannerImage(image.publicId);
+      throw error;
+    }
+  }
+
+  private async deleteUnusedBannerImage(publicId: string): Promise<void> {
+    try {
+      if (await this.repository.isBannerImageInUse(publicId)) return;
+      await this.imageStorage.deleteImage(publicId, 'banner');
+    } catch {
+      this.logger.error('Unused banner image cleanup failed.');
+    }
   }
 
   private async current(): Promise<WebsiteSettingsRecord> {
