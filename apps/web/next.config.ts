@@ -59,16 +59,6 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  async redirects() {
-    return [
-      {
-        source: '/:path*',
-        has: [{ type: 'host', value: 'last-dot.com' }],
-        destination: 'https://www.last-dot.com/:path*',
-        permanent: true,
-      },
-    ];
-  },
   async rewrites() {
     const internalApiUrl = buildEnvironment.INTERNAL_API_URL.replace(/\/$/u, '');
 

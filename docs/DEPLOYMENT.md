@@ -1,6 +1,65 @@
 # Production deployment runbook
 
-## Topology and prerequisites
+## Northflank Developer Sandbox
+
+Create both combined services from the same repository and branch. Use BuildKit, build context
+`/`, target `runner`, one instance, 512 MB RAM, and 0.2 vCPU per service.
+
+| Service       | Dockerfile             | HTTP port | Custom domain      |
+| ------------- | ---------------------- | --------- | ------------------ |
+| `lastdot-api` | `/apps/api/Dockerfile` | 4000      | `api.last-dot.com` |
+| `lastdot-web` | `/apps/web/Dockerfile` | 3000      | `last-dot.com`     |
+
+Use [the API runtime template](../apps/api/.env.northflank.example) to configure the API. Keep the
+existing cookie, JWT, and pepper secrets to preserve existing sessions and tokens.
+Use the Neon pooled URL for the runner. Leave API build arguments empty. For Zoho, use the host
+shown in the account settings and verify the order sender as a mailbox or alias. Port 465 pairs
+with `SMTP_SECURE=true`. Port 587 pairs with `SMTP_SECURE=false` for STARTTLS. The API validates
+SMTP configuration at startup. Verify SMTP connectivity and delivery separately.
+
+Set these build arguments on the web service:
+
+```env
+NEXT_PUBLIC_SITE_URL=https://last-dot.com
+NEXT_PUBLIC_API_URL=https://api.last-dot.com/api/v1
+NEXT_PUBLIC_CONTACT_EMAIL=support@last-dot.com
+NEXT_PUBLIC_ANALYTICS_ENABLED=false
+NEXT_PUBLIC_POSTHOG_KEY=
+NEXT_PUBLIC_POSTHOG_HOST=https://eu.i.posthog.com
+INTERNAL_API_URL=http://lastdot-api:4000/api/v1
+```
+
+Set this runtime variable on the web service:
+
+```env
+INTERNAL_API_URL=http://lastdot-api:4000/api/v1
+```
+
+The web image supplies `PORT=3000`, `HOSTNAME=0.0.0.0`, and `NODE_ENV=production`. The browser
+calls the storefront's own `/api/v1` route. Next.js generates the rewrite at build time and
+reads the runtime variable separately for server-rendered data. Rebuild when changing the
+rewrite destination or public build arguments. Verify the internal address from the web service
+before cutover. Compose continues to supply `http://api:4000/api/v1`.
+
+Use `/api/v1/health/live` for API liveness, `/api/v1/health/ready` for API readiness, and
+`/health` for web liveness and readiness. Check that the public storefront also returns
+HTTP 200 on `/api/v1/health/live` to test the rewrite. Add the generated web origin to
+`CORS_ORIGINS` only if browser smoke tests use it. Keep authenticated API traffic uncached.
+
+Mount persistent storage at `/app/uploads` before enabling uploads and verify the mount is
+writable by the container's `node` user. Restore any old upload files with their relative
+paths intact. A database backup contains upload metadata only.
+
+For an approved migration, build a manual job from the same release using the API Dockerfile,
+context `/`, and target `migrator`. Inject the direct Neon URL as the job's `DATABASE_URL`.
+Review migration history and test against a disposable database before scheduling a production
+run. Gate any schema-dependent release on successful migration. The API runner starts the app
+without running migrations or seeding.
+
+The VPS Compose setup below uses `DOMAIN`, `LETSENCRYPT_EMAIL`, and `POSTGRES_*`. Leave those
+out of Northflank environments. The `SEED_*` variables belong to the separate seed operation.
+
+## Docker Compose topology and prerequisites
 
 The stack targets an Ubuntu VPS with at least 2 vCPU, 4 GiB RAM, 20 GiB free SSD space, and a
 public IPv4 address. Install the current Docker Engine and Compose plugin using
@@ -41,7 +100,7 @@ openssl rand -hex 64   # each JWT/pepper secret; run separately three times
 embedded in the internal connection URL. A hexadecimal value satisfies this rule. In Compose env
 files, surround SMTP or seed passwords containing `$` or `#` with single quotes.
 
-Production startup requires working SMTP credentials. `MAIL_FROM_EMAIL` should use a domain with
+Production startup requires valid SMTP settings. Verify delivery separately. `MAIL_FROM_EMAIL` should use a domain with
 SPF, DKIM, and DMARC configured. Keep `SWAGGER_ENABLED=false` on the public service. Product and
 banner images persist in the `product_uploads` Docker volume.
 
