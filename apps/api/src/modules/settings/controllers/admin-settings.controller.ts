@@ -18,6 +18,7 @@ import {
   ApiBearerAuth,
   ApiBody,
   ApiConsumes,
+  ApiCreatedResponse,
   ApiNoContentResponse,
   ApiOkResponse,
   ApiTags,
@@ -45,6 +46,17 @@ const bannerFormValidation = new ValidationPipe({
   whitelist: true,
   forbidNonWhitelisted: true,
 });
+
+const bannerImageBody = {
+  schema: {
+    type: 'object',
+    required: ['data', 'file'],
+    properties: {
+      data: { type: 'string', description: 'JSON-encoded banner fields' },
+      file: { type: 'string', format: 'binary' },
+    },
+  },
+};
 
 async function parseBannerForm<T>(value: unknown, metatype: new () => T): Promise<T> {
   let parsed: unknown;
@@ -159,6 +171,8 @@ export class AdminSettingsController {
     FileInterceptor('file', { limits: { fileSize: 20_000_000, files: 1, fields: 1 } }),
   )
   @ApiConsumes('multipart/form-data')
+  @ApiBody(bannerImageBody)
+  @ApiCreatedResponse({ type: HomepageBannerResponseDto })
   async createBannerWithImage(
     @CurrentUser() actor: AuthenticatedUser,
     @Body('data') data: string,
@@ -176,6 +190,8 @@ export class AdminSettingsController {
     FileInterceptor('file', { limits: { fileSize: 20_000_000, files: 1, fields: 1 } }),
   )
   @ApiConsumes('multipart/form-data')
+  @ApiBody(bannerImageBody)
+  @ApiOkResponse({ type: HomepageBannerResponseDto })
   async updateBannerWithImage(
     @CurrentUser() actor: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,

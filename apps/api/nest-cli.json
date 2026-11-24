@@ -9,8 +9,12 @@
         "name": "@nestjs/swagger",
         "options": {
           "classValidatorShim": true,
-          "introspectComments": true
+          "introspectComments": true,
+          "esmCompatible": true
         }
+      },
+      {
+        "name": "../scripts/swagger-esm-references.cjs"
       }
     ]
   }
