@@ -9,7 +9,6 @@ import { ProductPurchasePanel } from '@/components/storefront/product-purchase-p
 import { SectionHeading } from '@/components/storefront/section-heading';
 import { getPublicProduct, listPublicProducts } from '@/lib/api/storefront';
 import { discountPercentage, formatEgp } from '@/lib/format/currency';
-import { clientEnvironment } from '@/lib/env/client';
 import { canonicalUrl } from '@/lib/seo/canonical';
 import type { Product } from '@/types/catalog';
 
@@ -76,10 +75,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
     sku: product.variants[0]?.sku,
     brand: { '@type': 'Brand', name: product.brand.name },
     category: product.category.name,
-    image: product.images.map((image) => image.secureUrl),
+    image: product.images.map((image) => canonicalUrl(image.secureUrl)),
     offers: {
       '@type': 'Offer',
-      url: `${clientEnvironment.NEXT_PUBLIC_SITE_URL}/products/${product.slug}`,
+      url: canonicalUrl(`/products/${product.slug}`),
       priceCurrency: 'EGP',
       price: (effectivePrice / 100).toFixed(2),
       availability:

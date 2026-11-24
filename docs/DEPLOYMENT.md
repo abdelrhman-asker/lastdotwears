@@ -8,7 +8,10 @@ Create both combined services from the same repository and branch. Use BuildKit,
 | Service       | Dockerfile             | HTTP port | Custom domain      |
 | ------------- | ---------------------- | --------- | ------------------ |
 | `lastdot-api` | `/apps/api/Dockerfile` | 4000      | `api.last-dot.com` |
-| `lastdot-web` | `/apps/web/Dockerfile` | 3000      | `last-dot.com`     |
+| `lastdot-web` | `/apps/web/Dockerfile` | 3000      | `www.last-dot.com` |
+
+Use `https://www.last-dot.com` as the canonical storefront. Configure the apex-to-WWW
+redirect in Cloudflare, preserving the request path and query string.
 
 Use [the API runtime template](../apps/api/.env.northflank.example) to configure the API. Keep the
 existing cookie, JWT, and pepper secrets to preserve existing sessions and tokens.
@@ -17,10 +20,17 @@ shown in the account settings and verify the order sender as a mailbox or alias.
 with `SMTP_SECURE=true`. Port 587 pairs with `SMTP_SECURE=false` for STARTTLS. The API validates
 SMTP configuration at startup. Verify SMTP connectivity and delivery separately.
 
+Set these API runtime variables for the storefront:
+
+```env
+WEB_APP_URL=https://www.last-dot.com
+CORS_ORIGINS=https://www.last-dot.com,https://last-dot.com
+```
+
 Set these build arguments on the web service:
 
 ```env
-NEXT_PUBLIC_SITE_URL=https://last-dot.com
+NEXT_PUBLIC_SITE_URL=https://www.last-dot.com
 NEXT_PUBLIC_API_URL=https://api.last-dot.com/api/v1
 NEXT_PUBLIC_CONTACT_EMAIL=support@last-dot.com
 NEXT_PUBLIC_ANALYTICS_ENABLED=false
@@ -86,8 +96,9 @@ chmod 600 .env.production
 chmod 750 scripts/*.sh
 ```
 
-Edit every placeholder. Use the hostname only for `DOMAIN`, for example `shop.example.com`—do not
-include `https://`, a path, a port, or `www` unless `www` is the actual canonical hostname.
+Edit every placeholder. Set `DOMAIN=www.last-dot.com` for production. Compose uses this hostname
+to derive `WEB_APP_URL` and `NEXT_PUBLIC_SITE_URL`. Enter the hostname without a scheme, path,
+or port.
 
 Generate independent secrets:
 

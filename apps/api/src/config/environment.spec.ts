@@ -3,7 +3,7 @@ import { validateEnvironment } from './environment.js';
 const validEnvironment = {
   NODE_ENV: 'test',
   DATABASE_URL: 'postgresql://commerce:commerce@localhost:5432/commerce',
-  CORS_ORIGINS: 'http://localhost:3000,https://shop.example.com',
+  CORS_ORIGINS: 'http://localhost:3000,https://www.last-dot.com,https://last-dot.com',
   COOKIE_SECRET: 'a-secure-test-secret-that-is-over-32-characters',
   JWT_ACCESS_SECRET: 'jwt-access-secret-that-is-at-least-sixty-four-characters-long-for-tests',
   REFRESH_TOKEN_PEPPER: 'refresh-token-pepper-that-is-at-least-sixty-four-characters-long-tests',
@@ -26,7 +26,7 @@ describe('validateEnvironment', () => {
       NODE_ENV: 'test',
       PORT: 4100,
       SWAGGER_ENABLED: false,
-      CORS_ORIGINS: ['http://localhost:3000', 'https://shop.example.com'],
+      CORS_ORIGINS: ['http://localhost:3000', 'https://www.last-dot.com', 'https://last-dot.com'],
       UPLOAD_ROOT: './uploads',
       RATE_LIMIT_LIMIT: 100,
     });

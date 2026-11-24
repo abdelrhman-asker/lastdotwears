@@ -3,14 +3,19 @@ import { describe, expect, it } from 'vitest';
 import { canonicalSiteOrigin, canonicalUrl } from '@/lib/seo/canonical';
 
 describe('canonical URLs', () => {
-  it('uses the production apex origin', () => {
-    expect(canonicalSiteOrigin).toBe('https://last-dot.com');
+  it('uses the production www origin', () => {
+    expect(canonicalSiteOrigin).toBe('https://www.last-dot.com');
   });
 
   it.each([
-    ['/', 'https://last-dot.com/'],
-    ['/products', 'https://last-dot.com/products'],
-    ['/products/example', 'https://last-dot.com/products/example'],
+    ['/', 'https://www.last-dot.com/'],
+    ['/products', 'https://www.last-dot.com/products'],
+    ['/products/example', 'https://www.last-dot.com/products/example'],
+    ['/sitemap.xml', 'https://www.last-dot.com/sitemap.xml'],
+    [
+      '/api/v1/uploads/products/example.jpg',
+      'https://www.last-dot.com/api/v1/uploads/products/example.jpg',
+    ],
     ['https://images.example.com/product.jpg', 'https://images.example.com/product.jpg'],
   ])('resolves %s to a canonical production URL', (path, expected) => {
     expect(canonicalUrl(path)).toBe(expected);
