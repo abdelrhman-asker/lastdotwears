@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),
+      'server-only': 'next/dist/compiled/server-only/empty.js',
     },
   },
   test: {

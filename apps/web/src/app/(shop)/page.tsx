@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 
 export default async function HomePage() {
   const [catalog, settings] = await Promise.all([safeHomeCatalog(), getPublicWebsiteSettings()]);
-  const railProducts = [...catalog.featured, ...catalog.newArrivals].filter(
+  const railProducts = [...catalog.featured.items, ...catalog.newArrivals.items].filter(
     (product, index, products) =>
       products.findIndex((candidate) => candidate.id === product.id) === index,
   );
@@ -30,16 +30,16 @@ export default async function HomePage() {
         products={railProducts}
         storeName={settings.storeName}
         announcement={announcement}
-        unavailable={catalog.unavailable}
+        unavailable={catalog.featured.unavailable || catalog.newArrivals.unavailable}
       />
 
       <section className="mx-auto max-w-[1600px] px-5 py-20 sm:px-8 lg:px-12 lg:py-28">
         <SectionHeading eyebrow="Explore" title="Shop by category" href="/categories" />
-        {catalog.unavailable ? (
+        {catalog.categories.unavailable ? (
           <CatalogUnavailable />
         ) : (
           <div className="grid gap-px bg-stone-300 md:grid-cols-3">
-            {catalog.categories.slice(0, 3).map((category, index) => (
+            {catalog.categories.items.slice(0, 3).map((category, index) => (
               <Link
                 key={category.id}
                 href={`/categories/${category.slug}`}
@@ -76,11 +76,11 @@ export default async function HomePage() {
             title="The current edit"
             href="/products?featured=true"
           />
-          {catalog.unavailable ? (
+          {catalog.featured.unavailable ? (
             <CatalogUnavailable />
           ) : (
             <ProductGrid
-              products={catalog.featured}
+              products={catalog.featured.items}
               emptyMessage="The next edit is being prepared."
             />
           )}
@@ -123,10 +123,13 @@ export default async function HomePage() {
 
       <section className="mx-auto max-w-[1600px] px-5 py-20 sm:px-8 lg:px-12 lg:py-28">
         <SectionHeading eyebrow="Just in" title="New arrivals" href="/products?newArrival=true" />
-        {catalog.unavailable ? (
+        {catalog.newArrivals.unavailable ? (
           <CatalogUnavailable />
         ) : (
-          <ProductGrid products={catalog.newArrivals} emptyMessage="New pieces are on their way." />
+          <ProductGrid
+            products={catalog.newArrivals.items}
+            emptyMessage="New pieces are on their way."
+          />
         )}
       </section>
 

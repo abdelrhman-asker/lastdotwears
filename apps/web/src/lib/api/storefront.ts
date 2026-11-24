@@ -61,10 +61,14 @@ export const getPublicWebsiteSettings = cache(async (): Promise<PublicWebsiteSet
   }
 });
 
-async function publicCatalogRequest<T>(path: string, tags: string[]): Promise<T> {
+async function publicCatalogRequest<T>(
+  path: string,
+  tags: string[],
+  freshness: 'cached' | 'fresh' = 'cached',
+): Promise<T> {
   const response = await fetch(`${getServerEnvironment().INTERNAL_API_URL}${path}`, {
     headers: { accept: 'application/json' },
-    next: { revalidate: 300, tags },
+    ...(freshness === 'fresh' ? { cache: 'no-store' } : { next: { revalidate: 300, tags } }),
   });
   if (!response.ok) throw new CatalogUnavailableError();
   return (await response.json()) as T;
@@ -81,11 +85,13 @@ export const listPublicBrands = cache(async (): Promise<Brand[]> =>
 export async function listPublicProducts(
   query: ProductListingQuery,
   limit = 24,
+  freshness: 'cached' | 'fresh' = 'cached',
 ): Promise<Paginated<Product>> {
-  return publicCatalogRequest<Paginated<Product>>(`/products?${toProductApiQuery(query, limit)}`, [
-    'catalog',
-    'products',
-  ]);
+  return publicCatalogRequest<Paginated<Product>>(
+    `/products?${toProductApiQuery(query, limit)}`,
+    ['catalog', 'products'],
+    freshness,
+  );
 }
 
 export const getPublicProduct = cache(async (slug: string): Promise<Product | null> => {
@@ -114,25 +120,32 @@ export const getPublicCategory = cache(async (slug: string): Promise<Category | 
   return (await response.json()) as Category;
 });
 
-export async function safeHomeCatalog(): Promise<{
-  categories: Category[];
-  featured: Product[];
-  newArrivals: Product[];
+async function safeCatalogSection<T>(request: Promise<T[]>): Promise<{
+  items: T[];
   unavailable: boolean;
 }> {
   try {
-    const [categories, featured, newArrivals] = await Promise.all([
-      listPublicCategories(),
-      listPublicProducts({ page: 1, sort: 'newest', featured: true }, 4),
-      listPublicProducts({ page: 1, sort: 'newest', newArrival: true }, 4),
-    ]);
-    return {
-      categories,
-      featured: featured.items,
-      newArrivals: newArrivals.items,
-      unavailable: false,
-    };
+    return { items: await request, unavailable: false };
   } catch {
-    return { categories: [], featured: [], newArrivals: [], unavailable: true };
+    return { items: [], unavailable: true };
   }
+}
+
+export async function safeHomeCatalog() {
+  // Admin writes refresh browser query state. Fetch featured and new-arrival lists when rendering
+  // the homepage so an empty cached list cannot hide newly published products.
+  const [categories, featured, newArrivals] = await Promise.all([
+    safeCatalogSection(listPublicCategories()),
+    safeCatalogSection(
+      listPublicProducts({ page: 1, sort: 'newest', featured: true }, 4, 'fresh').then(
+        (page) => page.items,
+      ),
+    ),
+    safeCatalogSection(
+      listPublicProducts({ page: 1, sort: 'newest', newArrival: true }, 4, 'fresh').then(
+        (page) => page.items,
+      ),
+    ),
+  ]);
+  return { categories, featured, newArrivals };
 }

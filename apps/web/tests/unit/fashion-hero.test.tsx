@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { FashionHero } from '@/components/storefront/fashion-hero';
 import type { Product } from '@/types/catalog';
@@ -113,7 +113,42 @@ beforeAll(() => {
   });
 });
 
+afterEach(() => vi.unstubAllEnvs());
+
 describe('FashionHero', () => {
+  it('renders both Cloudinary views for an active featured product in stock', () => {
+    vi.stubEnv('NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME', 'fixture-cloud');
+    const prefix =
+      'https://res.cloudinary.com/fixture-cloud/image/upload/c_limit,f_auto,q_auto,w_1200/v42/lastdot/products/fixture';
+    const [front, side] = baseProduct.images;
+    const product = {
+      ...baseProduct,
+      isNewArrival: true,
+      stockQuantity: 10,
+      variants: baseProduct.variants.map((variant) => ({ ...variant, stockQuantity: 10 })),
+      images: [
+        { ...side!, position: 0, secureUrl: `${prefix}/side.png` },
+        { ...front!, position: 1, secureUrl: `${prefix}/front.png` },
+      ],
+    };
+    render(
+      <FashionHero
+        products={[product]}
+        storeName="Last Dot"
+        announcement="Delivery across Egypt"
+      />,
+    );
+
+    const garment = screen.getByRole('button', { name: 'Select Relaxed Cotton Shirt' });
+    expect(garment.getAttribute('data-has-side-view')).toBe('true');
+    expect(garment.querySelector('[data-product-view="front"]')?.getAttribute('src')).toBe(
+      `${prefix}/front.png`,
+    );
+    expect(garment.querySelector('[data-product-view="side"]')?.getAttribute('src')).toBe(
+      `${prefix}/side.png`,
+    );
+    expect(screen.queryByText('The next collection is being prepared.')).toBeNull();
+  });
   it('selects real products and updates the product action', () => {
     const { container } = render(
       <FashionHero
