@@ -9,6 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 
 import { hasPrismaCode } from '../../../common/utils/prisma-error.util.js';
+import { isInstaPayPaymentUrl } from '../../../common/utils/instapay-url.util.js';
 import {
   IMAGE_STORAGE,
   type ImageStorage,
@@ -73,7 +74,16 @@ export class SettingsService {
   }
 
   async paymentSettings(): Promise<WebsiteSettingsRecord> {
-    return this.current();
+    const current = await this.current();
+    const runtimeUrl = this.config.get<string>('INSTAPAY_QR_VALUE');
+    if (runtimeUrl) {
+      return {
+        ...current,
+        instaPayId: this.config.getOrThrow<string>('INSTAPAY_ID'),
+        instaPayQrValue: runtimeUrl,
+      };
+    }
+    return current;
   }
 
   async updateSettings(
@@ -106,6 +116,16 @@ export class SettingsService {
     };
     if (!next.cashOnDeliveryEnabled && !next.instaPayEnabled) {
       throw new BadRequestException('At least one checkout payment method must remain enabled.');
+    }
+    if (next.instaPayEnabled && !next.instaPayId) {
+      throw new BadRequestException('An InstaPay ID is required when InstaPay is enabled.');
+    }
+    if (
+      input.instaPayQrValue &&
+      input.instaPayQrValue !== current.instaPayQrValue &&
+      !isInstaPayPaymentUrl(input.instaPayQrValue)
+    ) {
+      throw new BadRequestException('Use a complete HTTPS payment link on ipn.eg.');
     }
     if (next.announcementEnabled && !next.announcementText) {
       throw new BadRequestException(
@@ -292,6 +312,7 @@ export class SettingsService {
   }
 
   private defaults(): WebsiteSettingsWriteInput {
+    const instaPayId = this.config.get<string>('INSTAPAY_ID') ?? '';
     return {
       storeName: this.config.getOrThrow<string>('MAIL_FROM_NAME'),
       tagline: 'Modern essentials, considered for life in Egypt.',
@@ -302,8 +323,8 @@ export class SettingsService {
       announcementText: null,
       announcementEnabled: false,
       cashOnDeliveryEnabled: true,
-      instaPayEnabled: true,
-      instaPayId: this.config.getOrThrow<string>('INSTAPAY_ID'),
+      instaPayEnabled: Boolean(instaPayId),
+      instaPayId,
       instaPayQrValue: this.config.get<string>('INSTAPAY_QR_VALUE') || null,
       instaPayInstructions: this.config.getOrThrow<string>('INSTAPAY_INSTRUCTIONS'),
     };

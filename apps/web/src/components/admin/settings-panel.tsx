@@ -87,9 +87,10 @@ function WebsiteSettingsEditor() {
   return (
     <Section title="Store and payment configuration">
       <form
-        onSubmit={form.handleSubmit((input) =>
+        onSubmit={form.handleSubmit(({ instaPayId, ...input }) =>
           update.mutate({
             ...input,
+            ...(instaPayId.trim() ? { instaPayId } : {}),
             contactPhone: input.contactPhone || null,
             storeAddress: input.storeAddress || null,
             announcementText: input.announcementText || null,
@@ -144,9 +145,9 @@ function WebsiteSettingsEditor() {
           <h3 className="font-serif text-2xl">InstaPay</h3>
           <div className="mt-5 grid gap-5 md:grid-cols-2">
             <Label text="InstaPay ID">
-              <Input required {...form.register('instaPayId')} />
+              <Input {...form.register('instaPayId')} />
             </Label>
-            <Label text="QR payload override">
+            <Label text="InstaPay payment link">
               <Input {...form.register('instaPayQrValue')} />
             </Label>
             <div className="md:col-span-2">

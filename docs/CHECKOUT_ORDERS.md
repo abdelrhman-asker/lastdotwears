@@ -51,9 +51,10 @@ or gateway integration is present.
 ### Manual InstaPay
 
 InstaPay orders start at `WAITING_FOR_PAYMENT`. The order response displays the exact total,
-InstaPay ID, instructions, order-number reference, and a locally generated PNG QR data URL. The QR
-encodes the configured InstaPay value; no third-party QR service receives order information. The
-storefront explicitly tells the customer to enter the order number in the transfer reason or note.
+InstaPay ID, instructions, and order-number reference. When a payment link is configured, the API
+also supplies the complete link and a locally generated PNG QR code that encodes it. The storefront
+lets customers open the link or copy the ID and reference. Customers should still enter the order
+number in the transfer reason or note.
 After upload, the protected receipt is visible on the order page and is embedded in and attached to
 the order-received email.
 
@@ -65,13 +66,15 @@ Configure:
 
 ```dotenv
 ORDER_NUMBER_PREFIX=LDW
-INSTAPAY_ID=abdelrhman_asker@instapay
-INSTAPAY_QR_VALUE=
+INSTAPAY_ID=<merchant-payment-id>
+INSTAPAY_QR_VALUE=<complete-https-payment-link-on-ipn.eg>
 INSTAPAY_INSTRUCTIONS=Transfer the exact order total, include your order number, then wait for confirmation.
 ```
 
-`INSTAPAY_QR_VALUE` defaults to `INSTAPAY_ID` when omitted. Replace the sample ID before accepting
-real customer payments.
+Set both InstaPay runtime variables to override the saved store payment ID and link for checkout.
+Payment availability and instructions still come from the store settings. When the runtime link is
+blank, checkout uses the saved store link if it is valid. Without an approved HTTPS link on
+`ipn.eg`, checkout shows the payment ID and reference for manual transfer.
 
 ## Status policy
 

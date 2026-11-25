@@ -101,7 +101,8 @@ export interface Order {
   }>;
   instaPayInstructions: {
     instaPayId: string;
-    qrCodeDataUrl: string;
+    paymentUrl: string | null;
+    qrCodeDataUrl: string | null;
     instructions: string;
     amountPiasters: number;
     orderNumber: string;

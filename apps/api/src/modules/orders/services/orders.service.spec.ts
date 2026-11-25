@@ -141,6 +141,7 @@ describe('OrdersService', () => {
         instructions: () =>
           Promise.resolve({
             instaPayId: 'store@instapay',
+            paymentUrl: 'https://ipn.eg/S/fixture',
             qrCodeDataUrl: 'data:image/png;base64,abc',
             instructions: 'Transfer the total.',
             amountPiasters: current.totalPiasters,

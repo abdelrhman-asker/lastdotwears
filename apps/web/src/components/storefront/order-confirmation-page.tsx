@@ -1,11 +1,11 @@
 'use client';
 
-import Image from '@/components/shared/media-image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 import { PurchaseCompletedTracker } from '@/components/analytics/commerce-trackers';
 import { CancelOrderButton } from '@/components/storefront/cancel-order-button';
+import { CopyPaymentValue, InstaPayQr } from '@/components/storefront/instapay-payment-controls';
 import { Button } from '@/components/ui/button';
 import { StatusMessage } from '@/components/ui/status-message';
 import { useInstaPayProof, useOrder, useSubmitInstaPayProof } from '@/hooks/use-checkout';
@@ -92,13 +92,9 @@ export function OrderConfirmationPage({ orderNumber }: { orderNumber: string }) 
           ) : data.instaPayInstructions ? (
             <section className="border border-stone-950 bg-white p-6 sm:p-8">
               <div className="flex flex-col gap-7 sm:flex-row sm:items-center">
-                <Image
-                  src={data.instaPayInstructions.qrCodeDataUrl}
-                  alt="InstaPay transfer QR code"
-                  width={240}
-                  height={240}
-                  unoptimized
-                  className="mx-auto size-60 border border-stone-200 sm:mx-0"
+                <InstaPayQr
+                  paymentUrl={data.instaPayInstructions.paymentUrl}
+                  qrCodeDataUrl={data.instaPayInstructions.qrCodeDataUrl}
                 />
                 <div>
                   <p className="text-[10px] tracking-[0.18em] text-stone-500 uppercase">
@@ -110,13 +106,18 @@ export function OrderConfirmationPage({ orderNumber }: { orderNumber: string }) 
                   <dl className="mt-5 space-y-3 text-sm">
                     <div>
                       <dt className="text-stone-500">InstaPay ID</dt>
-                      <dd className="mt-1 font-medium break-all">
-                        {data.instaPayInstructions.instaPayId}
+                      <dd className="mt-1">
+                        <CopyPaymentValue
+                          label="InstaPay ID"
+                          value={data.instaPayInstructions.instaPayId}
+                        />
                       </dd>
                     </div>
                     <div>
                       <dt className="text-stone-500">Reference</dt>
-                      <dd className="mt-1 font-medium">{data.orderNumber}</dd>
+                      <dd className="mt-1">
+                        <CopyPaymentValue label="order reference" value={data.orderNumber} />
+                      </dd>
                     </div>
                   </dl>
                   <p className="mt-5 text-sm leading-6 text-stone-600">

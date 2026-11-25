@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isInstaPayPaymentUrl } from '../common/utils/instapay-url.util.js';
 
 const booleanFromString = z.preprocess((value) => {
   if (typeof value !== 'string') {
@@ -82,7 +83,7 @@ export const environmentSchema = z
       .trim()
       .regex(/^[A-Z0-9]{2,8}$/)
       .default('LDW'),
-    INSTAPAY_ID: z.string().trim().min(3).max(120).default('abdelrhman_asker@instapay'),
+    INSTAPAY_ID: optionalNonEmptyString.pipe(z.string().min(3).max(120).optional()),
     INSTAPAY_QR_VALUE: optionalNonEmptyString,
     INSTAPAY_INSTRUCTIONS: z
       .string()
@@ -98,6 +99,20 @@ export const environmentSchema = z
     RATE_LIMIT_LIMIT: z.coerce.number().int().positive().default(100),
   })
   .superRefine((environment, context) => {
+    if (environment.INSTAPAY_QR_VALUE && !isInstaPayPaymentUrl(environment.INSTAPAY_QR_VALUE)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['INSTAPAY_QR_VALUE'],
+        message: 'Use a complete HTTPS payment link on ipn.eg.',
+      });
+    }
+    if (environment.INSTAPAY_QR_VALUE && !environment.INSTAPAY_ID) {
+      context.addIssue({
+        code: 'custom',
+        path: ['INSTAPAY_ID'],
+        message: 'Required when INSTAPAY_QR_VALUE is configured.',
+      });
+    }
     if (
       environment.ADMIN_SETUP_ENABLED &&
       !/^[a-f0-9]{64}$/iu.test(environment.ADMIN_SETUP_SECRET ?? '')

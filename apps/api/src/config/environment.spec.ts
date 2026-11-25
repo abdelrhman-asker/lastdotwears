@@ -15,6 +15,35 @@ const validEnvironment = {
 };
 
 describe('validateEnvironment', () => {
+  it('preserves the full InstaPay payment link and requires a corresponding configured ID', () => {
+    const paymentUrl = 'https://ipn.eg/S/Fixture/instapay/AbC%2F09?token=a%2Bb';
+    expect(validateEnvironment(validEnvironment).INSTAPAY_ID).toBeUndefined();
+    expect(() =>
+      validateEnvironment({ ...validEnvironment, INSTAPAY_QR_VALUE: paymentUrl }),
+    ).toThrow('INSTAPAY_ID');
+    expect(
+      validateEnvironment({
+        ...validEnvironment,
+        INSTAPAY_ID: 'fixture@instapay',
+        INSTAPAY_QR_VALUE: paymentUrl,
+      }).INSTAPAY_QR_VALUE,
+    ).toBe(paymentUrl);
+  });
+
+  it.each([
+    'http://ipn.eg/S/fixture',
+    'https://ipn.eg.example/S/fixture',
+    'https://other@ipn.eg/S/fixture',
+  ])('rejects an unapproved InstaPay payment link %s', (paymentUrl) => {
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        INSTAPAY_ID: 'fixture@instapay',
+        INSTAPAY_QR_VALUE: paymentUrl,
+      }),
+    ).toThrow('INSTAPAY_QR_VALUE');
+  });
+
   it('keeps admin setup disabled by default and requires a strong secret when enabled', () => {
     expect(validateEnvironment(validEnvironment).ADMIN_SETUP_ENABLED).toBe(false);
     expect(() => validateEnvironment({ ...validEnvironment, ADMIN_SETUP_ENABLED: 'true' })).toThrow(

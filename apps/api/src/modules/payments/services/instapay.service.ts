@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import QRCode from 'qrcode';
+import { isInstaPayPaymentUrl } from '../../../common/utils/instapay-url.util.js';
 
 import type { InstaPayInstructionsDto } from '../dto/instapay.dto.js';
 import { SettingsService } from '../../settings/services/settings.service.js';
@@ -13,16 +14,19 @@ export class InstaPayService {
     amountPiasters: number,
   ): Promise<InstaPayInstructionsDto> {
     const settings = await this.settings.paymentSettings();
-    const instaPayId = settings.instaPayId;
-    const qrValue = settings.instaPayQrValue || instaPayId;
-    const qrCodeDataUrl = await QRCode.toDataURL(qrValue, {
-      errorCorrectionLevel: 'M',
-      margin: 2,
-      width: 320,
-      color: { dark: '#111111', light: '#ffffff' },
-    });
+    const configuredUrl = settings.instaPayQrValue;
+    const paymentUrl = configuredUrl && isInstaPayPaymentUrl(configuredUrl) ? configuredUrl : null;
+    const qrCodeDataUrl = paymentUrl
+      ? await QRCode.toDataURL(paymentUrl, {
+          errorCorrectionLevel: 'M',
+          margin: 2,
+          width: 320,
+          color: { dark: '#111111', light: '#ffffff' },
+        })
+      : null;
     return {
-      instaPayId,
+      instaPayId: settings.instaPayId,
+      paymentUrl,
       qrCodeDataUrl,
       instructions: settings.instaPayInstructions,
       amountPiasters,
