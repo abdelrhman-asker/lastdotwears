@@ -9,6 +9,7 @@ import {
   Patch,
   Post,
   Query,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -19,6 +20,7 @@ import {
 } from '@nestjs/swagger';
 
 import { Roles } from '../../../common/decorators/roles.decorator.js';
+import { CatalogRevalidationInterceptor } from '../../../common/interceptors/catalog-revalidation.interceptor.js';
 import {
   CategoryResponseDto,
   CreateCategoryDto,
@@ -31,6 +33,7 @@ import { CategoriesService } from '../services/categories.service.js';
 @ApiTags('Admin Categories')
 @ApiBearerAuth()
 @Roles('ADMIN')
+@UseInterceptors(CatalogRevalidationInterceptor)
 @Controller('admin/categories')
 export class AdminCategoriesController {
   constructor(private readonly service: CategoriesService) {}

@@ -1,8 +1,18 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  UseInterceptors,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../../../common/decorators/current-user.decorator.js';
 import { Roles } from '../../../common/decorators/roles.decorator.js';
+import { CatalogRevalidationInterceptor } from '../../../common/interceptors/catalog-revalidation.interceptor.js';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface.js';
 import {
   InventoryAdjustmentDto,
@@ -16,6 +26,7 @@ import { InventoryService } from '../services/inventory.service.js';
 @ApiTags('Admin Inventory')
 @ApiBearerAuth()
 @Roles('ADMIN')
+@UseInterceptors(CatalogRevalidationInterceptor)
 @Controller('admin/inventory')
 export class AdminInventoryController {
   constructor(private readonly service: InventoryService) {}

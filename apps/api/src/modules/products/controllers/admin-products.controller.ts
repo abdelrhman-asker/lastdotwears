@@ -25,6 +25,7 @@ import {
 
 import { CurrentUser } from '../../../common/decorators/current-user.decorator.js';
 import { Roles } from '../../../common/decorators/roles.decorator.js';
+import { CatalogRevalidationInterceptor } from '../../../common/interceptors/catalog-revalidation.interceptor.js';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface.js';
 import { ProductImageFilePipe } from '../../uploads/pipes/product-image-file.pipe.js';
 import {
@@ -45,6 +46,7 @@ import { ProductsService } from '../services/products.service.js';
 @ApiTags('Admin Products')
 @ApiBearerAuth()
 @Roles('ADMIN')
+@UseInterceptors(CatalogRevalidationInterceptor)
 @Controller('admin/products')
 export class AdminProductsController {
   constructor(private readonly service: ProductsService) {}

@@ -59,6 +59,17 @@ Set this runtime variable on the web service:
 INTERNAL_API_URL=http://lastdot-api:4000/api/v1
 ```
 
+Set `CATALOG_REVALIDATION_SECRET` to the same server-only runtime secret on the API and web
+services. Generate 32 random bytes encoded as 64 hexadecimal characters. Keep the API's
+`WEB_APP_URL` set to the canonical storefront. The API calls
+`POST /api/internal/catalog/revalidate` there after successful admin catalog writes. Allow that
+server-to-server POST to reach Next.js through the storefront ingress. The endpoint accepts an
+authenticated request for the catalog cache only.
+
+The catalog keeps a five-minute revalidation interval as a fallback if the webhook is
+unavailable. The default Northflank configuration uses one web instance. Use a shared Next.js
+cache and tag invalidation across replicas before scaling the storefront horizontally.
+
 The web image supplies `PORT=3000`, `HOSTNAME=0.0.0.0`, and `NODE_ENV=production`. The browser
 calls the storefront's own `/api/v1` route. Next.js generates the rewrite at build time and
 reads the runtime variable separately for server-rendered data. Rebuild when changing the

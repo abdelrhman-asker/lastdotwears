@@ -122,6 +122,7 @@ services:
       NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://eu.i.posthog.com}
       INTERNAL_API_URL: http://api:4000/api/v1
       NEXT_OUTPUT_MODE: standalone
+      CATALOG_REVALIDATION_SECRET: ${CATALOG_REVALIDATION_SECRET:-}
     expose:
       - '3000'
     depends_on:

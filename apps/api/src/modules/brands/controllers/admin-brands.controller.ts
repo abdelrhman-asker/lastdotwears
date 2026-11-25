@@ -9,10 +9,12 @@ import {
   Patch,
   Post,
   Query,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiNoContentResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 
 import { Roles } from '../../../common/decorators/roles.decorator.js';
+import { CatalogRevalidationInterceptor } from '../../../common/interceptors/catalog-revalidation.interceptor.js';
 import {
   BrandResponseDto,
   CreateBrandDto,
@@ -25,6 +27,7 @@ import { BrandsService } from '../services/brands.service.js';
 @ApiTags('Admin Brands')
 @ApiBearerAuth()
 @Roles('ADMIN')
+@UseInterceptors(CatalogRevalidationInterceptor)
 @Controller('admin/brands')
 export class AdminBrandsController {
   constructor(private readonly service: BrandsService) {}

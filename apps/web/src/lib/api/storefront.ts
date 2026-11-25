@@ -7,6 +7,8 @@ import { toProductApiQuery, type ProductListingQuery } from '@/lib/validation/st
 import type { Brand, Category, Paginated, Product } from '@/types/catalog';
 import type { PublicWebsiteSettings } from '@/types/settings';
 
+export const CATALOG_CACHE_TAG = 'catalog';
+
 export class CatalogUnavailableError extends Error {
   constructor() {
     super('The catalog service is temporarily unavailable.');
@@ -75,11 +77,11 @@ async function publicCatalogRequest<T>(
 }
 
 export const listPublicCategories = cache(async (): Promise<Category[]> =>
-  publicCatalogRequest<Category[]>('/categories', ['catalog', 'categories']),
+  publicCatalogRequest<Category[]>('/categories', [CATALOG_CACHE_TAG, 'categories']),
 );
 
 export const listPublicBrands = cache(async (): Promise<Brand[]> =>
-  publicCatalogRequest<Brand[]>('/brands', ['catalog', 'brands']),
+  publicCatalogRequest<Brand[]>('/brands', [CATALOG_CACHE_TAG, 'brands']),
 );
 
 export async function listPublicProducts(
@@ -89,7 +91,7 @@ export async function listPublicProducts(
 ): Promise<Paginated<Product>> {
   return publicCatalogRequest<Paginated<Product>>(
     `/products?${toProductApiQuery(query, limit)}`,
-    ['catalog', 'products'],
+    [CATALOG_CACHE_TAG, 'products'],
     freshness,
   );
 }
@@ -99,7 +101,7 @@ export const getPublicProduct = cache(async (slug: string): Promise<Product | nu
     `${getServerEnvironment().INTERNAL_API_URL}/products/${encodeURIComponent(slug)}`,
     {
       headers: { accept: 'application/json' },
-      next: { revalidate: 300, tags: ['catalog', 'products'] },
+      next: { revalidate: 300, tags: [CATALOG_CACHE_TAG, 'products'] },
     },
   );
   if (response.status === 404) return null;
@@ -112,7 +114,7 @@ export const getPublicCategory = cache(async (slug: string): Promise<Category | 
     `${getServerEnvironment().INTERNAL_API_URL}/categories/${encodeURIComponent(slug)}`,
     {
       headers: { accept: 'application/json' },
-      next: { revalidate: 300, tags: ['catalog', 'categories'] },
+      next: { revalidate: 300, tags: [CATALOG_CACHE_TAG, 'categories'] },
     },
   );
   if (response.status === 404) return null;
@@ -132,8 +134,7 @@ async function safeCatalogSection<T>(request: Promise<T[]>): Promise<{
 }
 
 export async function safeHomeCatalog() {
-  // Admin writes refresh browser query state. Fetch featured and new-arrival lists when rendering
-  // the homepage so an empty cached list cannot hide newly published products.
+  // Keep the homepage rail fresh independently of the cached listing and detail pages.
   const [categories, featured, newArrivals] = await Promise.all([
     safeCatalogSection(listPublicCategories()),
     safeCatalogSection(

@@ -56,6 +56,12 @@ export const environmentSchema = z
     EMAIL_VERIFICATION_TTL_HOURS: z.coerce.number().int().min(1).max(168).default(24),
     PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(5).max(120).default(30),
     WEB_APP_URL: z.url(),
+    CATALOG_REVALIDATION_SECRET: optionalNonEmptyString.pipe(
+      z
+        .string()
+        .regex(/^[a-f0-9]{64}$/iu, 'Use 64 hexadecimal characters.')
+        .optional(),
+    ),
     MAIL_TRANSPORT: z.enum(['log', 'smtp']).default('log'),
     MAIL_FROM_EMAIL: z.email(),
     MAIL_FROM_NAME: z.string().trim().min(1).max(120),
