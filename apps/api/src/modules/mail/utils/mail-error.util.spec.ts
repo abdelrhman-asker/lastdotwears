@@ -16,4 +16,15 @@ describe('mailErrorDetails', () => {
     expect(details).not.toContain('super-secret');
     expect(details).not.toContain(error.message);
   });
+
+  it('drops unrecognized metadata and raw server responses', () => {
+    const error = Object.assign(new Error('fixture-secret'), {
+      code: 'FIXTURESECRET',
+      command: 'FIXTURE COMMAND',
+      response: 'provider details',
+      responseCode: 123456,
+      syscall: 'fixture',
+    });
+    expect(mailErrorDetails(error)).toBe('Mail operation error');
+  });
 });

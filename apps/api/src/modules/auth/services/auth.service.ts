@@ -11,6 +11,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 
 import { MAIL_SERVICE, type MailService } from '../../mail/interfaces/mail-service.interface.js';
+import { mailErrorDetails } from '../../mail/utils/mail-error.util.js';
 import {
   toPublicUser,
   type PublicUser,
@@ -327,7 +328,7 @@ export class AuthService {
     try {
       await operation();
     } catch (error) {
-      this.logger.error('Transactional email delivery failed.', error);
+      this.logger.error(`Support account email delivery failed: ${mailErrorDetails(error)}`);
     }
   }
 }

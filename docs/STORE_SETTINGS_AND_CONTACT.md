@@ -26,8 +26,10 @@ is public, globally validated, and additionally limited to five requests per hou
 limiter. The message is committed before email is attempted, so an SMTP failure cannot discard a
 customer request.
 
-Customer care receives a notification with a safe reply-to address, while the customer receives an
-acknowledgement. Administrators use `/admin/messages` to search and paginate the inbox, record an
+The support transport sends a notification to `SUPPORT_NOTIFICATION_EMAIL` with the saved
+submission time and the customer's validated address as Reply-To. It also sends a separate
+acknowledgment from `SUPPORT_MAIL_FROM_EMAIL`. Each send can succeed independently.
+Administrators use `/admin/messages` to search and paginate the inbox, record an
 internal note, and move messages through `NEW`, `IN_PROGRESS`, `RESOLVED`, or `SPAM`. The first
 resolution stores a timestamp.
 
@@ -80,9 +82,10 @@ when they do not already exist. Re-running it preserves administrator edits.
 
 ## Production email
 
-Local development may use `MAIL_TRANSPORT=log`. Production environment validation requires
-`MAIL_TRANSPORT=smtp`, `SMTP_HOST`, a valid sender, and paired SMTP credentials when authentication
-is used. Module 10 supplies the final VPS environment and secret-management checklist.
+Local development may use `MAIL_TRANSPORT=log`. Production uses two authenticated mailboxes on
+the same SMTP endpoint. Orders, order status updates and payment receipts use the orders login.
+Contact emails, account verification and password resets use the support login. See the
+[API deployment settings](DEPLOYMENT.md#northflank-developer-sandbox) for the runtime variables.
 
 ## Verification
 

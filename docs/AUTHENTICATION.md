@@ -77,9 +77,9 @@ The seed requires `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_CUSTOMER_EMAI
 Argon2id settings, verifies both seed emails, and never logs credentials. Replace all
 example secrets and passwords before use.
 
-Development may use `MAIL_TRANSPORT=log`, which logs generated action URLs for local
-testing. Production configuration refuses to start unless SMTP delivery is selected and
-configured.
+Account verification and password reset use the support SMTP mailbox. Development may use
+`MAIL_TRANSPORT=log` to check whether the application attempted delivery. Use an authenticated local
+SMTP test inbox to inspect verification or reset links. Logs omit the links and their tokens.
 
 ## Verification recorded for this gate
 

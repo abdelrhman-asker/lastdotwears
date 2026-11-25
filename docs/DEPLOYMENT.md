@@ -15,10 +15,23 @@ redirect in Cloudflare, preserving the request path and query string.
 
 Use [the API runtime template](../apps/api/.env.northflank.example) to configure the API. Keep the
 existing cookie, JWT, and pepper secrets to preserve existing sessions and tokens.
-Use the Neon pooled URL for the runner. Leave API build arguments empty. For Zoho, use the host
-shown in the account settings and verify the order sender as a mailbox or alias. Port 465 pairs
-with `SMTP_SECURE=true`. Port 587 pairs with `SMTP_SECURE=false` for STARTTLS. The API validates
-SMTP configuration at startup. Verify SMTP connectivity and delivery separately.
+Use the Neon pooled URL for the runner. Leave API build arguments empty. Use the shared SMTP host
+shown in the Zoho account settings. Port 465 pairs with `SMTP_SECURE=true`. Port 587 pairs with
+`SMTP_SECURE=false` and requires STARTTLS.
+
+Configure both mailbox logins on the API service before deployment.
+
+| Variables | Value |
+| --- | --- |
+| `MAIL_TRANSPORT` | `smtp` |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE` | Existing Zoho host, port, and TLS mode |
+| `SMTP_USER`, `SMTP_PASSWORD` | `orders@last-dot.com` and that mailbox's app password |
+| `ORDER_NOTIFICATION_EMAIL` | `orders@last-dot.com` |
+| `SUPPORT_SMTP_USER`, `SUPPORT_SMTP_PASSWORD` | `support@last-dot.com` and that mailbox's app password |
+| `SUPPORT_MAIL_FROM_EMAIL`, `SUPPORT_NOTIFICATION_EMAIL` | `support@last-dot.com` for both |
+
+Store both passwords as Northflank runtime secrets. Verify each mailbox's delivery independently.
+An unusable mailbox is logged by channel while the other transport stays available.
 
 Set these API runtime variables for the storefront:
 
@@ -184,13 +197,11 @@ openssl rand -hex 64   # each JWT/pepper secret; run separately three times
 embedded in the internal connection URL. A hexadecimal value satisfies this rule. In Compose env
 files, surround SMTP or seed passwords containing `$` or `#` with single quotes.
 
-Production startup requires valid SMTP settings. Verify delivery separately. `MAIL_FROM_EMAIL` should use a domain with
-SPF, DKIM, and DMARC configured. Keep `SWAGGER_ENABLED=false` on the public service. Product and
-banner images persist in the `product_uploads` Docker volume.
-
-For authenticated SMTP, `EMAIL_FROM` must use the `SMTP_USER` mailbox or an alias that the provider
-has explicitly verified. With the supplied Zoho example, keep `EMAIL_FROM` on
-`orders@last-dot.com`; `MAIL_FROM_EMAIL` can remain the public customer-care destination.
+Production startup requires SMTP mode and a shared host. Configure and verify both mailbox logins
+using the variables above. The support sender should be the authenticated support mailbox or a
+verified alias for it. `MAIL_FROM_EMAIL` remains the fallback public contact address. Keep
+`SWAGGER_ENABLED=false` on the public service. Product and banner images persist in the
+`product_uploads` Docker volume.
 
 ## First deployment
 

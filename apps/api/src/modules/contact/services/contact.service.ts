@@ -2,7 +2,6 @@ import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 
 import { MAIL_SERVICE, type MailService } from '../../mail/interfaces/mail-service.interface.js';
 import { mailErrorDetails } from '../../mail/utils/mail-error.util.js';
-import { SettingsService } from '../../settings/services/settings.service.js';
 import type {
   AdminContactListQueryDto,
   ContactSubmissionResponseDto,
@@ -23,7 +22,6 @@ export class ContactService {
   constructor(
     @Inject(CONTACT_REPOSITORY) private readonly repository: ContactRepository,
     @Inject(MAIL_SERVICE) private readonly mail: MailService,
-    private readonly settings: SettingsService,
   ) {}
 
   async submit(input: CreateContactMessageDto): Promise<ContactSubmissionResponseDto> {
@@ -35,29 +33,29 @@ export class ContactService {
       subject: input.subject,
       message: input.message,
     });
-    const website = await this.settings.paymentSettings();
-    const firstName = input.name.split(/\s+/)[0] || input.name;
-    void Promise.allSettled([
-      this.mail.sendContactAcknowledgement({ email: input.email, firstName }, input.subject),
-      this.mail.sendContactNotification(website.contactEmail, {
-        name: input.name,
-        email: input.email,
-        phone: input.phone || null,
-        subject: input.subject,
-        body: input.message,
+    const firstName = saved.name.split(/\s+/)[0] || saved.name;
+    void this.deliver(saved.id, 'acknowledgment', () =>
+      this.mail.sendContactAcknowledgement({ email: saved.email, firstName }, saved.subject),
+    );
+    void this.deliver(saved.id, 'notification', () =>
+      this.mail.sendContactNotification({
+        name: saved.name,
+        email: saved.email,
+        phone: saved.phone,
+        subject: saved.subject,
+        body: saved.message,
+        submittedAt: saved.createdAt,
       }),
-    ]).then((results) => {
-      const failures = results.filter(
-        (result): result is PromiseRejectedResult => result.status === 'rejected',
-      );
-      if (failures.length > 0) {
-        const details = failures.map((failure) => mailErrorDetails(failure.reason)).join('; ');
-        this.logger.error(
-          `Contact email delivery failed for message ${saved.id} (${failures.length}/2): ${details}`,
-        );
-      }
-    });
+    );
     return { id: saved.id, message: 'Your message has been received.' };
+  }
+
+  private async deliver(id: string, kind: string, send: () => Promise<void>): Promise<void> {
+    try {
+      await send();
+    } catch (error) {
+      this.logger.error(`Contact ${kind} failed for message ${id}: ${mailErrorDetails(error)}`);
+    }
   }
 
   async list(query: AdminContactListQueryDto): Promise<PaginatedContactMessagesResponseDto> {

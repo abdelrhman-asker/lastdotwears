@@ -60,12 +60,15 @@ export const environmentSchema = z
     MAIL_FROM_EMAIL: z.email(),
     MAIL_FROM_NAME: z.string().trim().min(1).max(120),
     ORDER_NOTIFICATION_EMAIL: z.email().default('orders@last-dot.com'),
-    EMAIL_FROM: optionalNonEmptyString,
     SMTP_HOST: optionalNonEmptyString,
     SMTP_PORT: z.coerce.number().int().min(1).max(65_535).default(587),
     SMTP_SECURE: booleanFromString.default(false),
     SMTP_USER: optionalNonEmptyString,
     SMTP_PASSWORD: optionalNonEmptyString,
+    SUPPORT_SMTP_USER: optionalNonEmptyString,
+    SUPPORT_SMTP_PASSWORD: optionalNonEmptyString,
+    SUPPORT_MAIL_FROM_EMAIL: z.email().default('support@last-dot.com'),
+    SUPPORT_NOTIFICATION_EMAIL: z.email().default('support@last-dot.com'),
     STORAGE_PROVIDER: z.enum(['local', 'cloudinary']).default('local'),
     CLOUDINARY_CLOUD_NAME: optionalNonEmptyString,
     CLOUDINARY_API_KEY: optionalNonEmptyString,
@@ -161,14 +164,6 @@ export const environmentSchema = z
         code: 'custom',
         path: ['SMTP_HOST'],
         message: 'SMTP_HOST is required when MAIL_TRANSPORT is smtp.',
-      });
-    }
-
-    if (Boolean(environment.SMTP_USER) !== Boolean(environment.SMTP_PASSWORD)) {
-      context.addIssue({
-        code: 'custom',
-        path: ['SMTP_PASSWORD'],
-        message: 'SMTP_USER and SMTP_PASSWORD must be provided together.',
       });
     }
   });

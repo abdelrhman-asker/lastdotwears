@@ -8,6 +8,15 @@ export interface MailRecipient {
   firstName: string;
 }
 
+export interface ContactMailDetails {
+  name: string;
+  email: string;
+  phone: string | null;
+  subject: string;
+  body: string;
+  submittedAt: Date;
+}
+
 export interface OrderMailItem {
   productName: string;
   sku: string;
@@ -56,10 +65,7 @@ export interface MailService {
   sendEmailVerification(recipient: MailRecipient, verificationUrl: string): Promise<void>;
   sendPasswordReset(recipient: MailRecipient, resetUrl: string): Promise<void>;
   sendContactAcknowledgement(recipient: MailRecipient, subject: string): Promise<void>;
-  sendContactNotification(
-    recipientEmail: string,
-    message: { name: string; email: string; phone: string | null; subject: string; body: string },
-  ): Promise<void>;
+  sendContactNotification(message: ContactMailDetails): Promise<void>;
   sendOrderReceivedEmail(order: OrderMailDetails, receipt?: OrderReceiptAttachment): Promise<void>;
   sendOrderConfirmedEmail(order: OrderMailDetails): Promise<void>;
   sendNewOrderNotification(

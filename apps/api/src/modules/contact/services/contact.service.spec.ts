@@ -1,5 +1,8 @@
-import type { MailService } from '../../mail/interfaces/mail-service.interface.js';
-import type { SettingsService } from '../../settings/services/settings.service.js';
+import type {
+  ContactMailDetails,
+  MailRecipient,
+  MailService,
+} from '../../mail/interfaces/mail-service.interface.js';
 import type { ContactRepository } from '../interfaces/contact-repository.interface.js';
 import type { ContactMessageRecord } from '../interfaces/contact.interface.js';
 import { ContactService } from './contact.service.js';
@@ -27,10 +30,7 @@ describe('ContactService', () => {
       sendContactAcknowledgement: () => pendingMail,
       sendContactNotification: () => pendingMail,
     } as unknown as MailService;
-    const settings = {
-      paymentSettings: () => Promise.resolve({ contactEmail: 'support@last-dot.com' }),
-    } as unknown as SettingsService;
-    const subject = new ContactService(repository, mail, settings);
+    const subject = new ContactService(repository, mail);
 
     await expect(
       subject.submit({
@@ -42,26 +42,51 @@ describe('ContactService', () => {
     ).resolves.toEqual({ id: saved.id, message: 'Your message has been received.' });
   });
 
-  it('persists a message even if email delivery fails', async () => {
-    const repository = { create: () => Promise.resolve(saved) } as unknown as ContactRepository;
-    const mail = {
-      sendContactAcknowledgement: () => Promise.reject(new Error('SMTP unavailable')),
-      sendContactNotification: () => Promise.reject(new Error('SMTP unavailable')),
-    } as unknown as MailService;
-    const settings = {
-      paymentSettings: () => Promise.resolve({ contactEmail: 'support@last-dot.com' }),
-    } as unknown as SettingsService;
-    const subject = new ContactService(repository, mail, settings);
-
-    await expect(
-      subject.submit({
-        name: saved.name,
-        email: saved.email,
-        subject: saved.subject,
-        message: saved.message,
-      }),
-    ).resolves.toEqual({ id: saved.id, message: 'Your message has been received.' });
-  });
+  it.each(['notification', 'acknowledgment'])(
+    'preserves the saved message and attempts both sends when %s fails',
+    async (failure) => {
+      const events: string[] = [];
+      const repository = {
+        create: () => {
+          events.push('saved');
+          return Promise.resolve(saved);
+        },
+      } as unknown as ContactRepository;
+      const mail = {
+        sendContactAcknowledgement: (recipient: MailRecipient, subject: string) => {
+          events.push('acknowledgment');
+          expect(recipient).toEqual({ email: saved.email, firstName: 'Mariam' });
+          expect(subject).toBe(saved.subject);
+          if (failure === 'acknowledgment') throw new Error('Fixture failure');
+          return Promise.resolve();
+        },
+        sendContactNotification: (message: ContactMailDetails) => {
+          events.push('notification');
+          expect(message).toEqual({
+            name: saved.name,
+            email: saved.email,
+            phone: saved.phone,
+            subject: saved.subject,
+            body: saved.message,
+            submittedAt: saved.createdAt,
+          });
+          return failure === 'notification'
+            ? Promise.reject(new Error('Fixture failure'))
+            : Promise.resolve();
+        },
+      } as unknown as MailService;
+      const subject = new ContactService(repository, mail);
+      await expect(
+        subject.submit({
+          name: saved.name,
+          email: saved.email,
+          subject: saved.subject,
+          message: saved.message,
+        }),
+      ).resolves.toEqual({ id: saved.id, message: 'Your message has been received.' });
+      expect(events).toEqual(['saved', 'acknowledgment', 'notification']);
+    },
+  );
 
   it('records the first resolution timestamp', async () => {
     let written: { resolvedAt?: Date | null } | undefined;
@@ -72,7 +97,7 @@ describe('ContactService', () => {
         return Promise.resolve({ ...saved, status: 'RESOLVED' as const, ...input });
       },
     } as unknown as ContactRepository;
-    const subject = new ContactService(repository, {} as MailService, {} as SettingsService);
+    const subject = new ContactService(repository, {} as MailService);
 
     await subject.update(saved.id, { status: 'RESOLVED' });
     expect(written?.resolvedAt).toBeInstanceOf(Date);

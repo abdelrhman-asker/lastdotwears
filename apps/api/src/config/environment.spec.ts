@@ -15,6 +15,35 @@ const validEnvironment = {
 };
 
 describe('validateEnvironment', () => {
+  it('defaults the support sender and destination independently of the public address', () => {
+    expect(
+      validateEnvironment({ ...validEnvironment, MAIL_FROM_EMAIL: 'public@example.test' }),
+    ).toMatchObject({
+      SUPPORT_MAIL_FROM_EMAIL: 'support@last-dot.com',
+      SUPPORT_NOTIFICATION_EMAIL: 'support@last-dot.com',
+    });
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        SUPPORT_MAIL_FROM_EMAIL: 'not-email',
+        SUPPORT_NOTIFICATION_EMAIL: 'also-not-email',
+      }),
+    ).toThrow(/SUPPORT_MAIL_FROM_EMAIL.*SUPPORT_NOTIFICATION_EMAIL/u);
+  });
+
+  it('allows one SMTP mailbox to run when the other has an incomplete credential pair', () => {
+    const config = validateEnvironment({
+      ...validEnvironment,
+      MAIL_TRANSPORT: 'smtp',
+      SMTP_HOST: 'smtp.example.test',
+      SMTP_USER: 'orders@example.test',
+      SMTP_PASSWORD: 'fixture-orders',
+      SUPPORT_SMTP_USER: 'support@example.test',
+    });
+    expect(config.MAIL_TRANSPORT).toBe('smtp');
+    expect(config.SUPPORT_SMTP_PASSWORD).toBeUndefined();
+  });
+
   it('preserves the full InstaPay payment link and requires a corresponding configured ID', () => {
     const paymentUrl = 'https://ipn.eg/S/Fixture/instapay/AbC%2F09?token=a%2Bb';
     expect(validateEnvironment(validEnvironment).INSTAPAY_ID).toBeUndefined();
@@ -129,17 +158,19 @@ describe('validateEnvironment', () => {
         ...validEnvironment,
         NODE_ENV: 'production',
         MAIL_TRANSPORT: 'smtp',
-        EMAIL_FROM: 'Last Dot <orders@last-dot.com>',
         SMTP_HOST: 'smtp.zoho.com',
         SMTP_PORT: '465',
         SMTP_SECURE: 'true',
         SMTP_USER: 'orders@last-dot.com',
         SMTP_PASSWORD: 'server-only-app-password',
+        SUPPORT_SMTP_USER: 'support@last-dot.com',
+        SUPPORT_SMTP_PASSWORD: 'fixture-support-app-password',
         UPLOAD_ROOT: '/app/uploads',
       }),
     ).toMatchObject({
       NODE_ENV: 'production',
-      EMAIL_FROM: 'Last Dot <orders@last-dot.com>',
+      SUPPORT_SMTP_USER: 'support@last-dot.com',
+      SUPPORT_MAIL_FROM_EMAIL: 'support@last-dot.com',
       SMTP_PORT: 465,
       SMTP_SECURE: true,
       UPLOAD_ROOT: '/app/uploads',
