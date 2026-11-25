@@ -3,6 +3,7 @@ import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } fro
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 import { InstaPayInstructionsDto } from '../../payments/dto/instapay.dto.js';
+import { canCustomerCancel, needsInstaPayRefundReview } from '../interfaces/order.interface.js';
 import type {
   OrderItemRecord,
   OrderRecord,
@@ -66,6 +67,7 @@ export class OrderStatusEventResponseDto implements OrderStatusEventRecord {
   @ApiProperty({ enum: orderStatuses }) toStatus!: OrderStatus;
   @ApiPropertyOptional({ nullable: true }) note!: string | null;
   @ApiProperty({ format: 'date-time' }) createdAt!: Date;
+  @ApiPropertyOptional() customerInitiated?: boolean;
 }
 
 export class OrderResponseDto {
@@ -73,6 +75,8 @@ export class OrderResponseDto {
   @ApiProperty() orderNumber!: string;
   @ApiProperty() invoiceNumber!: string;
   @ApiProperty({ enum: orderStatuses }) status!: OrderStatus;
+  @ApiProperty() canCancel!: boolean;
+  @ApiProperty() needsRefundReview!: boolean;
   @ApiProperty({ enum: ['CASH_ON_DELIVERY', 'INSTAPAY'] })
   paymentMethod!: 'CASH_ON_DELIVERY' | 'INSTAPAY';
   @ApiProperty({ enum: paymentStatuses }) paymentStatus!: PaymentStatus;
@@ -113,7 +117,13 @@ export class OrderResponseDto {
       confirmationNote: record.payment.confirmationNote,
       confirmedAt: record.payment.confirmedAt,
     };
-    return { ...record, payment, instaPayInstructions: instructions };
+    return {
+      ...record,
+      payment,
+      instaPayInstructions: instructions,
+      canCancel: canCustomerCancel(record.status),
+      needsRefundReview: needsInstaPayRefundReview(record),
+    };
   }
 }
 
@@ -163,6 +173,7 @@ export class OrderSummaryResponseDto implements OrderSummaryRecord {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty() orderNumber!: string;
   @ApiProperty({ enum: orderStatuses }) status!: OrderStatus;
+  @ApiProperty() canCancel!: boolean;
   @ApiProperty({ enum: ['CASH_ON_DELIVERY', 'INSTAPAY'] })
   paymentMethod!: 'CASH_ON_DELIVERY' | 'INSTAPAY';
   @ApiProperty({ enum: paymentStatuses }) paymentStatus!: PaymentStatus;
@@ -173,7 +184,7 @@ export class OrderSummaryResponseDto implements OrderSummaryRecord {
   previewItems!: OrderHistoryPreviewItemResponseDto[];
 
   static from(record: OrderSummaryRecord): OrderSummaryResponseDto {
-    return { ...record };
+    return { ...record, canCancel: canCustomerCancel(record.status) };
   }
 }
 

@@ -84,19 +84,23 @@ export class CheckoutService {
     if (result.kind !== 'ok') this.throwFailure(result);
     if (!result.idempotentReplay) {
       const mailOperations = [
-        this.mailService.sendNewOrderNotification(result.order).catch((error: unknown) =>
-          this.logger.error(
-            `New order notification failed for ${result.order.orderNumber}: ${mailErrorDetails(error)}`,
+        Promise.resolve()
+          .then(() => this.mailService.sendNewOrderNotification(result.order))
+          .catch((error: unknown) =>
+            this.logger.error(
+              `New order notification failed for ${result.order.orderNumber}: ${mailErrorDetails(error)}`,
+            ),
           ),
-        ),
       ];
       if (result.order.paymentMethod === 'CASH_ON_DELIVERY') {
         mailOperations.push(
-          this.mailService.sendOrderReceivedEmail(result.order).catch((error: unknown) =>
-            this.logger.error(
-              `Order received email failed for ${result.order.orderNumber}: ${mailErrorDetails(error)}`,
+          Promise.resolve()
+            .then(() => this.mailService.sendOrderReceivedEmail(result.order))
+            .catch((error: unknown) =>
+              this.logger.error(
+                `Order received email failed for ${result.order.orderNumber}: ${mailErrorDetails(error)}`,
+              ),
             ),
-          ),
         );
       }
       await Promise.all(mailOperations);

@@ -1,4 +1,7 @@
-import type { OrderMailDetails } from '../interfaces/mail-service.interface.js';
+import type {
+  AdminOrderMailDetails,
+  OrderMailDetails,
+} from '../interfaces/mail-service.interface.js';
 import { escapeHtml, formatEgp, humanize } from './mail-template.util.js';
 
 export interface OrderEmailTemplate {
@@ -268,17 +271,49 @@ export function buildOrderConfirmedEmail(order: OrderMailDetails): OrderEmailTem
   };
 }
 
-export function buildNewOrderNotificationEmail(order: OrderMailDetails): OrderEmailTemplate {
+export function buildNewOrderNotificationEmail(
+  order: AdminOrderMailDetails,
+  adminUrl: string,
+  receipt: 'attached' | 'submitted' | 'none' = 'none',
+): OrderEmailTemplate {
   const name = customerName(order);
-  const introduction = 'A new order has been placed on the Last Dot store.';
+  const isReceiptUpdate = receipt !== 'none';
+  const introduction = isReceiptUpdate
+    ? 'A customer submitted an InstaPay transfer receipt for this order.'
+    : 'A new order has been placed on the Last Dot store.';
+  const address = [
+    order.shippingAddressLine1,
+    order.shippingAddressLine2,
+    order.shippingCity,
+    order.shippingGovernorateName,
+    order.shippingPostalCode,
+  ]
+    .filter(Boolean)
+    .join(', ');
+  const details: Array<[string, string]> = [
+    ['Created (UTC)', order.createdAt.toISOString()],
+    ['Customer', name],
+    ['Email', order.customerEmail],
+    ['Phone', order.customerPhone],
+    ['Shipping address', address],
+    ['Order status', humanize(order.status)],
+    ['Payment method', humanize(order.paymentMethod)],
+    ['Payment status', humanize(order.paymentStatus)],
+  ];
+  if (order.deliveryNotes) details.push(['Customer notes', order.deliveryNotes]);
+  const receiptNote =
+    receipt === 'attached'
+      ? 'The InstaPay transfer receipt is attached.'
+      : receipt === 'submitted'
+        ? 'Review the submitted InstaPay transfer receipt in the admin dashboard.'
+        : '';
   const text = [
     introduction,
     '',
     'Order: ' + order.orderNumber,
-    'Customer: ' + name + ' <' + order.customerEmail + '>',
-    'Status: ' + humanize(order.status),
-    'Payment: ' + humanize(order.paymentMethod),
-    'Delivery: ' + order.shippingCity + ', ' + order.shippingGovernorateName,
+    ...details.map(([label, value]) => label + ': ' + value),
+    ...(receiptNote ? [receiptNote] : []),
+    'View order: ' + adminUrl,
     '',
     'Items',
     receivedItemsText(order),
@@ -289,11 +324,16 @@ export function buildNewOrderNotificationEmail(order: OrderMailDetails): OrderEm
     'Total: ' + formatEgp(order.totalPiasters),
   ].join('\n');
   const content = [
-    "<p style='margin:0 0 20px'><strong>Customer:</strong> ",
-    escapeHtml(name),
-    '<br><strong>Email:</strong> ',
-    escapeHtml(order.customerEmail),
+    "<p style='margin:0 0 20px;line-height:1.6'>",
+    details
+      .map(
+        ([label, value]) =>
+          '<strong>' + escapeHtml(label) + ':</strong> ' + escapeHtml(value) + '<br>',
+      )
+      .join(''),
     '</p>',
+    ...(receiptNote ? ['<p>' + escapeHtml(receiptNote) + '</p>'] : []),
+    orderLink(adminUrl),
     "<h2 style='margin:0 0 8px;font-family:Georgia,Times,serif;font-size:22px;font-weight:500'>Order items</h2>",
     "<table role='presentation' width='100%' cellspacing='0' cellpadding='0' style='font-size:14px'>",
     "<tr><th style='padding:8px 8px 8px 0;text-align:left;font-size:11px;color:#78716c;text-transform:uppercase'>Item</th>",
@@ -304,23 +344,61 @@ export function buildNewOrderNotificationEmail(order: OrderMailDetails): OrderEm
     "<table role='presentation' width='100%' cellspacing='0' cellpadding='0' style='margin-top:20px;font-size:14px'>",
     totalsHtml(order),
     '</table>',
-    "<p style='margin:24px 0 0;font-size:13px;color:#57534e;line-height:1.6'><strong>Status:</strong> ",
-    escapeHtml(humanize(order.status)),
-    '<br><strong>Payment:</strong> ',
-    escapeHtml(humanize(order.paymentMethod)),
-    '<br><strong>Delivery:</strong> ',
-    escapeHtml(order.shippingCity + ', ' + order.shippingGovernorateName),
-    '</p>',
   ].join('');
   return {
-    subject: 'New order #' + order.orderNumber,
+    subject: (isReceiptUpdate ? 'InstaPay receipt for order #' : 'New order #') + order.orderNumber,
     text,
     html: emailShell({
       eyebrow: 'Merchant notification',
-      title: 'A new order was placed',
+      title: isReceiptUpdate ? 'InstaPay receipt submitted' : 'A new order was placed',
       introduction,
       orderNumber: order.orderNumber,
       content,
     }),
   };
+}
+
+export function buildOrderCancelledEmail(
+  order: OrderMailDetails,
+  admin?: { url: string; refundReview: boolean },
+): OrderEmailTemplate {
+  const introduction = admin
+    ? 'The customer cancelled this order before confirmation.'
+    : 'Your order has been cancelled.';
+  const review = admin?.refundReview
+    ? 'Review the InstaPay transfer in the admin dashboard to determine whether a manual refund is due.'
+    : '';
+  const details = admin
+    ? 'Customer: ' + customerName(order) + ' <' + order.customerEmail + '>'
+    : 'Hello ' + customerName(order) + ',';
+  return {
+    subject: 'Order #' + order.orderNumber + ' cancelled',
+    text: [
+      details,
+      introduction,
+      'Order: ' + order.orderNumber,
+      'Payment method: ' + humanize(order.paymentMethod),
+      ...(review ? [review] : []),
+      ...(admin ? ['View order: ' + admin.url] : []),
+    ].join('\n'),
+    html: emailShell({
+      eyebrow: admin ? 'Merchant notification' : 'Order update',
+      title: 'Order cancelled',
+      introduction,
+      orderNumber: order.orderNumber,
+      content: [
+        '<p>' + escapeHtml(details) + '</p>',
+        ...(review ? ['<p>' + escapeHtml(review) + '</p>'] : []),
+        ...(admin ? [orderLink(admin.url)] : []),
+      ].join(''),
+    }),
+  };
+}
+
+function orderLink(adminUrl: string): string {
+  return (
+    "<p style='margin:20px 0'><a style='background:#1c1917;color:#fff;padding:12px 18px;text-decoration:none' href='" +
+    escapeHtml(adminUrl) +
+    "'>View order in admin dashboard</a></p>"
+  );
 }

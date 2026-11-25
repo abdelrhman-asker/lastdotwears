@@ -3,8 +3,10 @@ import type { Readable } from 'node:stream';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import nodemailer, { type Transporter } from 'nodemailer';
+import type SMTPTransport from 'nodemailer/lib/smtp-transport/index.js';
 
 import type {
+  AdminOrderMailDetails,
   MailRecipient,
   MailService,
   OrderMailDetails,
@@ -12,8 +14,10 @@ import type {
 } from '../interfaces/mail-service.interface.js';
 import {
   buildNewOrderNotificationEmail,
+  buildOrderCancelledEmail,
   buildOrderConfirmedEmail,
   buildOrderReceivedEmail,
+  type OrderEmailTemplate,
 } from '../templates/order-email.templates.js';
 
 function escapeHtml(value: string): string {
@@ -28,7 +32,7 @@ function escapeHtml(value: string): string {
 @Injectable()
 export class TransactionalMailService implements MailService {
   private readonly logger = new Logger(TransactionalMailService.name);
-  private readonly transporter: Transporter | null;
+  private readonly transporter: Transporter<SMTPTransport.SentMessageInfo> | null;
   private readonly from: string | { name: string; address: string };
   private readonly logOnly: boolean;
   private readonly orderFrom = { name: 'Last Dot Orders', address: 'orders@last-dot.com' };
@@ -138,17 +142,72 @@ export class TransactionalMailService implements MailService {
     });
   }
 
-  async sendNewOrderNotification(order: OrderMailDetails): Promise<void> {
-    const message = buildNewOrderNotificationEmail(order);
+  async sendNewOrderNotification(
+    order: AdminOrderMailDetails,
+    receipt?: OrderReceiptAttachment,
+    receiptSubmitted = false,
+  ): Promise<void> {
+    const message = buildNewOrderNotificationEmail(
+      order,
+      this.adminOrderUrl(order),
+      receipt ? 'attached' : receiptSubmitted ? 'submitted' : 'none',
+    );
+    await this.sendAdminOrderMessage(order, message, receipt);
+  }
+
+  async sendOrderCancelledEmail(order: OrderMailDetails): Promise<void> {
+    const message = buildOrderCancelledEmail(order);
     await this.sendInformational({
+      ...message,
+      from: this.orderFrom,
+      recipientEmail: order.customerEmail,
+      replyTo: this.orderReplyTo,
+      completeHtml: true,
+    });
+  }
+
+  async sendOrderCancellationNotification(
+    order: AdminOrderMailDetails,
+    refundReview: boolean,
+  ): Promise<void> {
+    const message = buildOrderCancelledEmail(order, {
+      url: this.adminOrderUrl(order),
+      refundReview,
+    });
+    await this.sendAdminOrderMessage(order, message);
+  }
+
+  private adminOrderUrl(order: AdminOrderMailDetails): string {
+    return new URL(
+      `/admin/orders/${encodeURIComponent(order.id)}`,
+      this.configService.getOrThrow<string>('WEB_APP_URL'),
+    ).href;
+  }
+
+  private async sendAdminOrderMessage(
+    order: AdminOrderMailDetails,
+    message: OrderEmailTemplate,
+    receipt?: OrderReceiptAttachment,
+  ): Promise<void> {
+    await this.sendInformational({
+      ...message,
       from: this.orderFrom,
       recipientEmail: this.configService.getOrThrow<string>('ORDER_NOTIFICATION_EMAIL'),
       replyTo: order.customerEmail,
-      subject: message.subject,
-      text: message.text,
-      html: message.html,
       completeHtml: true,
+      ...(receipt
+        ? {
+            attachments: [
+              {
+                filename: `receipt-${order.orderNumber}.${this.extensionFor(receipt.contentType)}`,
+                content: receipt.stream,
+                contentType: receipt.contentType,
+              },
+            ],
+          }
+        : {}),
     });
+    if (!this.logOnly) this.logger.log(`SMTP accepted admin notification: ${message.subject}`);
   }
 
   private smtpAuthentication(): { user: string; pass: string } | undefined {
@@ -207,15 +266,15 @@ export class TransactionalMailService implements MailService {
       filename: string;
       content: Readable;
       contentType: string;
-      cid: string;
+      cid?: string;
     }>;
   }): Promise<void> {
     if (this.logOnly) {
-      this.logger.log(`${input.subject} for ${input.recipientEmail}`);
+      this.logger.log(`Log-only mail transport: ${input.subject}`);
       return;
     }
     if (!this.transporter) throw new Error('SMTP transport is not initialized.');
-    await this.transporter.sendMail({
+    const result = await this.transporter.sendMail({
       from: input.from ?? this.from,
       to: input.recipientEmail,
       ...(input.replyTo ? { replyTo: input.replyTo } : {}),
@@ -226,6 +285,9 @@ export class TransactionalMailService implements MailService {
         : `<div style="font-family:Arial,Helvetica,sans-serif;color:#1c1917;line-height:1.6;max-width:560px;margin:0 auto;padding:32px">${input.html}<p style="margin-top:32px;font-size:12px;color:#78716c">Last-Dot Wears customer care</p></div>`,
       ...(input.attachments ? { attachments: input.attachments } : {}),
     });
+    if (result.accepted.length === 0) {
+      throw Object.assign(new Error('SMTP did not accept the recipient.'), { code: 'ERECIPIENT' });
+    }
   }
 
   private extensionFor(contentType: string): string {

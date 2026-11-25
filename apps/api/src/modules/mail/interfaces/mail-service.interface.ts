@@ -1,4 +1,5 @@
 import type { Readable } from 'node:stream';
+import type { OrderRecord } from '../../orders/interfaces/order.interface.js';
 
 export const MAIL_SERVICE = Symbol('MAIL_SERVICE');
 
@@ -38,6 +39,19 @@ export interface OrderReceiptAttachment {
   contentType: string;
 }
 
+export type AdminOrderMailDetails = OrderMailDetails &
+  Pick<
+    OrderRecord,
+    | 'id'
+    | 'createdAt'
+    | 'customerPhone'
+    | 'shippingAddressLine1'
+    | 'shippingAddressLine2'
+    | 'shippingPostalCode'
+    | 'deliveryNotes'
+    | 'paymentStatus'
+  >;
+
 export interface MailService {
   sendEmailVerification(recipient: MailRecipient, verificationUrl: string): Promise<void>;
   sendPasswordReset(recipient: MailRecipient, resetUrl: string): Promise<void>;
@@ -48,5 +62,14 @@ export interface MailService {
   ): Promise<void>;
   sendOrderReceivedEmail(order: OrderMailDetails, receipt?: OrderReceiptAttachment): Promise<void>;
   sendOrderConfirmedEmail(order: OrderMailDetails): Promise<void>;
-  sendNewOrderNotification(order: OrderMailDetails): Promise<void>;
+  sendNewOrderNotification(
+    order: AdminOrderMailDetails,
+    receipt?: OrderReceiptAttachment,
+    receiptSubmitted?: boolean,
+  ): Promise<void>;
+  sendOrderCancelledEmail(order: OrderMailDetails): Promise<void>;
+  sendOrderCancellationNotification(
+    order: AdminOrderMailDetails,
+    refundReview: boolean,
+  ): Promise<void>;
 }

@@ -218,11 +218,12 @@ describe('Health endpoints (e2e)', () => {
       .expect(({ body }) => expect(body).toMatchObject({ status: 400 }));
   });
 
-  it('protects checkout and customer order snapshots', async () => {
+  it('requires a shopping bag for guest checkout and authentication for account routes', async () => {
     await request(httpServer)
       .post('/api/v1/checkout/quote')
       .send({ governorateCode: 'cairo' })
-      .expect(401);
+      .expect(400)
+      .expect(({ body }) => expect(body).toMatchObject({ detail: 'Your shopping bag is empty.' }));
     await request(httpServer).get('/api/v1/orders/LDW-20260802-ABC12345').expect(401);
     await request(httpServer).get('/api/v1/orders?page=1').expect(401);
     await request(httpServer).get('/api/v1/addresses').expect(401);

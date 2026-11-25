@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 import { PurchaseCompletedTracker } from '@/components/analytics/commerce-trackers';
+import { CancelOrderButton } from '@/components/storefront/cancel-order-button';
 import { Button } from '@/components/ui/button';
 import { StatusMessage } from '@/components/ui/status-message';
 import { useInstaPayProof, useOrder, useSubmitInstaPayProof } from '@/hooks/use-checkout';
@@ -72,9 +73,11 @@ export function OrderConfirmationPage({ orderNumber }: { orderNumber: string }) 
       ) : null}
       <header className="border-b border-stone-300 pb-8 text-center">
         <p className="text-[10px] tracking-[0.22em] text-stone-500 uppercase">
-          {data.paymentMethod === 'INSTAPAY' && !paymentProofSubmitted
-            ? 'Complete your payment'
-            : 'Order received'}
+          {data.status === 'CANCELLED'
+            ? 'Order cancelled'
+            : data.instaPayInstructions && !paymentProofSubmitted
+              ? 'Complete your payment'
+              : 'Order received'}
         </p>
         <h1 className="mt-5 font-serif text-5xl tracking-[-0.04em] sm:text-6xl">
           Thank you, {data.customerFirstName}.
@@ -84,7 +87,9 @@ export function OrderConfirmationPage({ orderNumber }: { orderNumber: string }) 
 
       <div className="mt-10 grid gap-8 lg:grid-cols-[1fr_340px]">
         <div className="space-y-8">
-          {data.instaPayInstructions ? (
+          {data.status === 'CANCELLED' ? (
+            <StatusMessage>This order has been cancelled.</StatusMessage>
+          ) : data.instaPayInstructions ? (
             <section className="border border-stone-950 bg-white p-6 sm:p-8">
               <div className="flex flex-col gap-7 sm:flex-row sm:items-center">
                 <Image
@@ -138,11 +143,11 @@ export function OrderConfirmationPage({ orderNumber }: { orderNumber: string }) 
                 )}
               </div>
             </section>
-          ) : (
+          ) : data.paymentMethod === 'CASH_ON_DELIVERY' ? (
             <StatusMessage tone="success">
               Your cash-on-delivery order has been placed. Pay the courier when it arrives.
             </StatusMessage>
-          )}
+          ) : null}
 
           <section className="border border-stone-300 bg-white p-6 sm:p-8">
             <div className="flex items-center justify-between gap-5">
@@ -209,6 +214,7 @@ export function OrderConfirmationPage({ orderNumber }: { orderNumber: string }) 
           >
             Continue shopping
           </Link>
+          <CancelOrderButton orderNumber={data.orderNumber} canCancel={data.canCancel} />
         </aside>
       </div>
     </div>

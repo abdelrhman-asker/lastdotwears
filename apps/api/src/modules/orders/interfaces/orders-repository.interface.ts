@@ -33,7 +33,8 @@ export interface OrdersRepository {
   }): Promise<{ items: OrderRecord[]; total: number }>;
   transition(input: {
     orderId: string;
-    actorId: string;
+    actorId: string | null;
+    owner?: ShopperOwner;
     expectedStatus: OrderStatus;
     status: OrderStatus;
     note: string | null;

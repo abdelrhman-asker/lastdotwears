@@ -57,6 +57,8 @@ export interface Order {
   orderNumber: string;
   invoiceNumber: string;
   status: OrderStatus;
+  canCancel: boolean;
+  needsRefundReview: boolean;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
   customerFirstName: string;
@@ -95,6 +97,7 @@ export interface Order {
     toStatus: OrderStatus;
     note: string | null;
     createdAt: string;
+    customerInitiated?: boolean;
   }>;
   instaPayInstructions: {
     instaPayId: string;
@@ -109,6 +112,7 @@ export interface OrderSummary {
   id: string;
   orderNumber: string;
   status: OrderStatus;
+  canCancel: boolean;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
   totalPiasters: number;

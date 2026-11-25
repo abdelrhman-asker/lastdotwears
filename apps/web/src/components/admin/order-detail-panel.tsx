@@ -152,7 +152,18 @@ export function OrderDetailPanel({ id }: { id: string }) {
               Payment: <strong>{data.paymentStatus.replaceAll('_', ' ')}</strong>
             </p>
             <p className="mt-2 text-xs text-stone-500">{data.paymentMethod.replaceAll('_', ' ')}</p>
+            {data.needsRefundReview ? (
+              <div className="mt-4">
+                <StatusMessage>Manual InstaPay refund review required.</StatusMessage>
+              </div>
+            ) : null}
           </section>
+          {data.status === 'CANCELLED' && data.payment.proofSubmittedAt ? (
+            <section className="border border-stone-300 bg-white p-6">
+              <h2 className="font-serif text-2xl">InstaPay receipt</h2>
+              <AdminPaymentProofImage id={data.id} orderNumber={data.orderNumber} />
+            </section>
+          ) : null}
           {data.paymentMethod === 'INSTAPAY' && data.status === 'WAITING_FOR_PAYMENT' ? (
             data.payment.proofSubmittedAt ? (
               <section className="border border-amber-300 bg-amber-50 p-6">
@@ -246,7 +257,11 @@ export function OrderDetailPanel({ id }: { id: string }) {
             <ol className="mt-5 space-y-4">
               {data.statusEvents.map((event) => (
                 <li className="border-l border-stone-300 pl-4" key={event.id}>
-                  <p className="text-xs font-medium">{event.toStatus.replaceAll('_', ' ')}</p>
+                  <p className="text-xs font-medium">
+                    {event.customerInitiated
+                      ? 'Customer cancellation'
+                      : event.toStatus.replaceAll('_', ' ')}
+                  </p>
                   <p className="mt-1 text-[10px] text-stone-500">
                     {new Intl.DateTimeFormat('en-EG', {
                       dateStyle: 'medium',

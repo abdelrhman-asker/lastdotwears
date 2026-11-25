@@ -10,6 +10,21 @@ export type OrderStatus =
 export type PaymentMethod = 'CASH_ON_DELIVERY' | 'INSTAPAY';
 export type PaymentStatus = 'PENDING' | 'WAITING_FOR_PAYMENT' | 'PAID' | 'CANCELLED' | 'REFUNDED';
 
+export const customerCancellationNote = 'Cancelled by the customer.';
+
+export function canCustomerCancel(status: OrderStatus): boolean {
+  return status === 'PENDING' || status === 'WAITING_FOR_PAYMENT';
+}
+
+export function needsInstaPayRefundReview(order: OrderRecord): boolean {
+  return (
+    order.status === 'CANCELLED' &&
+    order.paymentMethod === 'INSTAPAY' &&
+    order.paymentStatus !== 'REFUNDED' &&
+    (order.payment.proofSubmittedAt !== null || order.paymentStatus === 'PAID')
+  );
+}
+
 export interface OrderItemRecord {
   id: string;
   productId: string | null;
@@ -44,6 +59,7 @@ export interface OrderStatusEventRecord {
   toStatus: OrderStatus;
   note: string | null;
   createdAt: Date;
+  customerInitiated?: boolean;
 }
 
 export interface OrderHistoryPreviewItemRecord {

@@ -28,6 +28,11 @@ import type {
 import { OrderResponseDto, OrderSummaryResponseDto } from '../dto/order.dto.js';
 import type { OrderRecord, OrderStatus } from '../interfaces/order.interface.js';
 import {
+  canCustomerCancel,
+  customerCancellationNote,
+  needsInstaPayRefundReview,
+} from '../interfaces/order.interface.js';
+import {
   ORDERS_REPOSITORY,
   type OrdersRepository,
 } from '../interfaces/orders-repository.interface.js';
@@ -65,6 +70,45 @@ export class OrdersService {
     const order = await this.repository.findShopperOrder(owner, orderNumber);
     if (!order) throw new NotFoundException('Order not found.');
     return this.toResponse(order);
+  }
+
+  async cancelShopperOrder(owner: ShopperOwner, orderNumber: string): Promise<OrderResponseDto> {
+    this.assertShopperOwner(owner);
+    const current = await this.repository.findShopperOrder(owner, orderNumber);
+    if (!current) throw new NotFoundException('Order not found.');
+    if (current.status === 'CANCELLED') return this.toResponse(current);
+    if (!canCustomerCancel(current.status)) {
+      throw new ConflictException('This order is past the customer cancellation window.');
+    }
+
+    const result = await this.repository.transition({
+      owner,
+      orderId: current.id,
+      actorId: owner.userId ?? null,
+      expectedStatus: current.status,
+      status: 'CANCELLED',
+      note: customerCancellationNote,
+      restockItems: true,
+    });
+    if (result === 'not_found') throw new NotFoundException('Order not found.');
+    if (result === 'conflict') {
+      const latest = await this.repository.findShopperOrder(owner, orderNumber);
+      if (!latest) throw new NotFoundException('Order not found.');
+      if (latest.status === 'CANCELLED') return this.toResponse(latest);
+      throw new ConflictException('Order changed concurrently. Refresh and try again.');
+    }
+    await Promise.all([
+      this.deliver(result, 'Customer cancellation email', () =>
+        this.mailService.sendOrderCancelledEmail(result),
+      ),
+      this.deliver(result, 'Admin cancellation notification', () =>
+        this.mailService.sendOrderCancellationNotification(
+          result,
+          needsInstaPayRefundReview(result),
+        ),
+      ),
+    ]);
+    return this.toResponse(result);
   }
 
   async listCustomer(
@@ -147,24 +191,24 @@ export class OrdersService {
         );
       }
       committed = true;
-      const receipt = await this.imageStorage
-        .readPaymentProof(stored.publicId)
-        .catch((error: unknown) => {
-          this.logger.error(
-            `Transfer receipt could not be attached for ${result.orderNumber}: ${mailErrorDetails(error)}`,
-          );
-          return null;
-        });
-      await this.mailService
-        .sendOrderReceivedEmail(result, receipt ?? undefined)
-        .catch((error: unknown) =>
-          this.logger.error(
-            `Order received email failed for ${result.orderNumber}: ${mailErrorDetails(error)}`,
-          ),
-        )
-        .finally(() => {
-          receipt?.stream.destroy();
-        });
+      await Promise.all([
+        this.deliver(result, 'Order received email', async () => {
+          const receipt = await this.readReceiptForMail(result, stored.publicId, 'customer');
+          try {
+            await this.mailService.sendOrderReceivedEmail(result, receipt ?? undefined);
+          } finally {
+            receipt?.stream.destroy();
+          }
+        }),
+        this.deliver(result, 'Admin InstaPay receipt notification', async () => {
+          const receipt = await this.readReceiptForMail(result, stored.publicId, 'admin');
+          try {
+            await this.mailService.sendNewOrderNotification(result, receipt ?? undefined, true);
+          } finally {
+            receipt?.stream.destroy();
+          }
+        }),
+      ]);
       return this.toResponse(result);
     } finally {
       if (!committed)
@@ -262,7 +306,9 @@ export class OrdersService {
 
   async toResponse(order: OrderRecord): Promise<OrderResponseDto> {
     const instructions =
-      order.paymentMethod === 'INSTAPAY' && order.paymentStatus === 'WAITING_FOR_PAYMENT'
+      order.paymentMethod === 'INSTAPAY' &&
+      order.status === 'WAITING_FOR_PAYMENT' &&
+      order.paymentStatus === 'WAITING_FOR_PAYMENT'
         ? await this.instaPay.instructions(order.orderNumber, order.totalPiasters)
         : null;
     return OrderResponseDto.from(order, instructions);
@@ -276,13 +322,40 @@ export class OrdersService {
   }
 
   private async sendConfirmationEmail(order: OrderRecord): Promise<void> {
-    await this.mailService
-      .sendOrderConfirmedEmail(order)
-      .catch((error: unknown) =>
-        this.logger.error(
-          `Order confirmation email failed for ${order.orderNumber}: ${mailErrorDetails(error)}`,
-        ),
+    await this.deliver(order, 'Order confirmation email', () =>
+      this.mailService.sendOrderConfirmedEmail(order),
+    );
+  }
+
+  private async deliver(
+    order: OrderRecord,
+    label: string,
+    send: () => Promise<void>,
+  ): Promise<void> {
+    try {
+      await send();
+    } catch (error) {
+      this.logger.error(`${label} failed for ${order.orderNumber}: ${mailErrorDetails(error)}`);
+    }
+  }
+
+  private async readReceiptForMail(
+    order: OrderRecord,
+    publicId: string,
+    recipient: 'customer' | 'admin',
+  ): Promise<StoredImageFile | null> {
+    try {
+      const receipt = await this.imageStorage.readPaymentProof(publicId);
+      if (receipt) return receipt;
+      this.logger.warn(
+        `Transfer receipt unavailable for ${recipient} email for ${order.orderNumber}.`,
       );
+    } catch (error) {
+      this.logger.error(
+        `Transfer receipt could not be attached for ${recipient} email for ${order.orderNumber}: ${mailErrorDetails(error)}`,
+      );
+    }
+    return null;
   }
 
   private async readPaymentProof(order: OrderRecord): Promise<StoredImageFile> {

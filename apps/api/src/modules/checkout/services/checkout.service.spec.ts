@@ -192,47 +192,53 @@ describe('CheckoutService', () => {
     ).rejects.toThrow('Update unavailable');
   });
 
-  it('sends the customer and merchant emails only after a new COD order is saved', async () => {
-    const events: string[] = [];
-    const emailedOrders: OrderRecord[] = [];
-    const sendOrderReceivedEmail = (order: OrderRecord) => {
-      events.push('email');
-      emailedOrders.push(order);
-      return Promise.resolve();
-    };
-    const repository = {
-      place: () => {
-        events.push('saved');
-        return Promise.resolve({
-          kind: 'ok' as const,
-          order: placedOrder,
-          idempotentReplay: false,
-        });
-      },
-    } as unknown as CheckoutRepository;
-    const orders = {
-      toResponse: () => Promise.resolve({ ...placedOrder, instaPayInstructions: null }),
-    } as unknown as OrdersService;
-    const service = new CheckoutService(
-      repository,
-      { get: () => Promise.resolve(cart) } as unknown as CartService,
-      orders,
-      settings,
-      {
-        sendOrderReceivedEmail,
-        sendNewOrderNotification: () => {
-          events.push('merchant-email');
-          return Promise.resolve();
+  it.each(['registered', 'guest'] as const)(
+    'sends both emails after a new %s COD order is saved',
+    async (shopper) => {
+      const events: string[] = [];
+      const emailedOrders: OrderRecord[] = [];
+      const sendOrderReceivedEmail = (order: OrderRecord) => {
+        events.push('email');
+        emailedOrders.push(order);
+        return Promise.resolve();
+      };
+      const repository = {
+        place: () => {
+          events.push('saved');
+          return Promise.resolve({
+            kind: 'ok' as const,
+            order: placedOrder,
+            idempotentReplay: false,
+          });
         },
-      } as unknown as MailService,
-    );
+      } as unknown as CheckoutRepository;
+      const orders = {
+        toResponse: () => Promise.resolve({ ...placedOrder, instaPayInstructions: null }),
+      } as unknown as OrdersService;
+      const service = new CheckoutService(
+        repository,
+        { get: () => Promise.resolve(cart) } as unknown as CartService,
+        orders,
+        settings,
+        {
+          sendOrderReceivedEmail,
+          sendNewOrderNotification: () => {
+            events.push('merchant-email');
+            return Promise.resolve();
+          },
+        } as unknown as MailService,
+      );
 
-    await expect(service.place(user, { userId: user.id }, placeInput)).resolves.toMatchObject({
-      orderNumber: placedOrder.orderNumber,
-    });
-    expect(events).toEqual(['saved', 'merchant-email', 'email']);
-    expect(emailedOrders).toEqual([placedOrder]);
-  });
+      const owner =
+        shopper === 'registered' ? { userId: user.id } : { guestTokenHash: 'guest-fixture' };
+      const customer = shopper === 'registered' ? user : undefined;
+      await expect(service.place(customer, owner, placeInput)).resolves.toMatchObject({
+        orderNumber: placedOrder.orderNumber,
+      });
+      expect(events).toEqual(['saved', 'merchant-email', 'email']);
+      expect(emailedOrders).toEqual([placedOrder]);
+    },
+  );
 
   it('notifies the merchant immediately but waits for an InstaPay receipt before emailing the customer', async () => {
     let emailCalls = 0;
@@ -309,33 +315,43 @@ describe('CheckoutService', () => {
     expect(emailCalls).toBe(0);
   });
 
-  it('keeps a saved order successful when the email provider fails', async () => {
-    const repository = {
-      place: () =>
-        Promise.resolve({
-          kind: 'ok' as const,
-          order: placedOrder,
-          idempotentReplay: false,
-        }),
-    } as unknown as CheckoutRepository;
-    const orders = {
-      toResponse: () => Promise.resolve({ ...placedOrder, instaPayInstructions: null }),
-    } as unknown as OrdersService;
-    const service = new CheckoutService(
-      repository,
-      { get: () => Promise.resolve(cart) } as unknown as CartService,
-      orders,
-      settings,
-      {
-        sendOrderReceivedEmail: () => Promise.reject(new Error('SMTP unavailable')),
-        sendNewOrderNotification: () => Promise.reject(new Error('SMTP unavailable')),
-      } as unknown as MailService,
-    );
+  it.each(['customer', 'admin'] as const)(
+    'attempts both deliveries and keeps the order saved when the %s email fails',
+    async (failure) => {
+      const attempted: string[] = [];
+      const send = (recipient: typeof failure) => {
+        attempted.push(recipient);
+        if (recipient === failure) throw new Error('SMTP unavailable');
+        return Promise.resolve();
+      };
+      const repository = {
+        place: () =>
+          Promise.resolve({
+            kind: 'ok' as const,
+            order: placedOrder,
+            idempotentReplay: false,
+          }),
+      } as unknown as CheckoutRepository;
+      const orders = {
+        toResponse: () => Promise.resolve({ ...placedOrder, instaPayInstructions: null }),
+      } as unknown as OrdersService;
+      const service = new CheckoutService(
+        repository,
+        { get: () => Promise.resolve(cart) } as unknown as CartService,
+        orders,
+        settings,
+        {
+          sendOrderReceivedEmail: () => send('customer'),
+          sendNewOrderNotification: () => send('admin'),
+        } as unknown as MailService,
+      );
 
-    await expect(service.place(user, { userId: user.id }, placeInput)).resolves.toMatchObject({
-      orderNumber: placedOrder.orderNumber,
-    });
-  });
+      await expect(service.place(user, { userId: user.id }, placeInput)).resolves.toMatchObject({
+        orderNumber: placedOrder.orderNumber,
+      });
+      expect(attempted).toEqual(['admin', 'customer']);
+    },
+  );
 
   it('never attaches SMTP credentials to the order response', async () => {
     const smtpPassword = 'smtp-secret-that-must-stay-server-side';

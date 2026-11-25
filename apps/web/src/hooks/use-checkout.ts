@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { commerceQueryKeys } from '@/hooks/use-commerce';
 import {
+  cancelOrder,
   getCheckoutQuote,
   getInvoice,
   getInstaPayProof,
@@ -66,6 +67,23 @@ export function useOrder(orderNumber: string) {
     queryKey: checkoutQueryKeys.order(orderNumber),
     queryFn: () => getOrder(orderNumber),
     enabled: Boolean(orderNumber),
+  });
+}
+
+export function useCancelOrder(orderNumber: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => cancelOrder(orderNumber),
+    onSuccess: (order) => {
+      queryClient.setQueryData(checkoutQueryKeys.order(order.orderNumber), order);
+      queryClient.setQueryData(checkoutQueryKeys.invoice(order.orderNumber), order);
+      void queryClient.invalidateQueries({ queryKey: ['orders', 'history'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'orders'] });
+    },
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: checkoutQueryKeys.order(orderNumber) });
+      void queryClient.invalidateQueries({ queryKey: ['orders', 'history'] });
+    },
   });
 }
 

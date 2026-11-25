@@ -10,6 +10,7 @@ import type {
 } from '../interfaces/order.interface.js';
 import type { OrdersRepository } from '../interfaces/orders-repository.interface.js';
 import type { ShopperOwner } from '../../shopper/interfaces/shopper-owner.interface.js';
+import { canCustomerCancel, customerCancellationNote } from '../interfaces/order.interface.js';
 
 const orderInclude = {
   items: { orderBy: { createdAt: 'asc' as const } },
@@ -117,6 +118,10 @@ export function mapOrder(order: OrderEntity): OrderRecord {
       toStatus: event.toStatus,
       note: event.note,
       createdAt: event.createdAt,
+      customerInitiated:
+        event.toStatus === 'CANCELLED' &&
+        event.note === customerCancellationNote &&
+        event.actorId === order.userId,
     })),
   };
 }
@@ -179,6 +184,17 @@ export class PrismaOrdersRepository implements OrdersRepository {
         return 'conflict' as const;
       }
 
+      // Take the order row lock before writing the payment, the same lock order as cancellation.
+      const waiting = await transaction.order.updateMany({
+        where: {
+          id: order.id,
+          status: 'WAITING_FOR_PAYMENT',
+          paymentStatus: 'WAITING_FOR_PAYMENT',
+        },
+        data: { updatedAt: input.submittedAt },
+      });
+      if (waiting.count !== 1) return 'conflict' as const;
+
       const updated = await transaction.payment.updateMany({
         where: { orderId: order.id, proofSubmittedAt: null },
         data: {
@@ -197,10 +213,14 @@ export class PrismaOrdersRepository implements OrdersRepository {
           note: 'Customer submitted an InstaPay transfer receipt.',
         },
       });
-      return order.id;
+      return mapOrder(
+        await transaction.order.findUniqueOrThrow({
+          where: { id: order.id },
+          include: orderInclude,
+        }),
+      );
     });
-    if (result === 'not_found' || result === 'conflict') return result;
-    return (await this.findShopperOrder(input.owner, input.orderNumber)) ?? 'not_found';
+    return result;
   }
 
   async listAdmin(input: Parameters<OrdersRepository['listAdmin']>[0]) {
@@ -242,20 +262,31 @@ export class PrismaOrdersRepository implements OrdersRepository {
     try {
       const result = await this.prisma.$transaction(
         async (transaction) => {
-          const order = await transaction.order.findUnique({
-            where: { id: input.orderId },
-            include: { items: true },
+          const ownerFilter = input.owner ? this.ownerWhere(input.owner) : {};
+          const order = await transaction.order.findFirst({
+            where: { id: input.orderId, ...ownerFilter },
+            include: { items: true, payment: true },
           });
           if (!order) return 'not_found' as const;
           if (order.status !== input.expectedStatus) return 'conflict' as const;
+          if (input.owner && (input.status !== 'CANCELLED' || !canCustomerCancel(order.status))) {
+            return 'conflict' as const;
+          }
 
-          const paymentStatus = this.paymentStatusForTransition(
-            input.status,
-            order.paymentMethod,
-            order.paymentStatus,
-          );
+          const preservePayment =
+            input.owner &&
+            (order.paymentStatus === 'PAID' ||
+              order.paymentStatus === 'REFUNDED' ||
+              (order.paymentMethod === 'INSTAPAY' && order.payment?.proofSubmittedAt));
+          const paymentStatus = preservePayment
+            ? order.paymentStatus
+            : this.paymentStatusForTransition(
+                input.status,
+                order.paymentMethod,
+                order.paymentStatus,
+              );
           const updated = await transaction.order.updateMany({
-            where: { id: order.id, status: input.expectedStatus },
+            where: { id: order.id, status: input.expectedStatus, ...ownerFilter },
             data: { status: input.status, paymentStatus },
           });
           if (updated.count !== 1) return 'conflict' as const;
@@ -301,12 +332,16 @@ export class PrismaOrdersRepository implements OrdersRepository {
               note: input.note,
             },
           });
-          return order.id;
+          return mapOrder(
+            await transaction.order.findUniqueOrThrow({
+              where: { id: order.id },
+              include: orderInclude,
+            }),
+          );
         },
         { isolationLevel: 'Serializable' },
       );
-      if (result === 'not_found' || result === 'conflict') return result;
-      return (await this.findAdminOrder(result)) ?? 'not_found';
+      return result;
     } catch (error) {
       if (this.isTransactionConflict(error)) return 'conflict';
       throw error;

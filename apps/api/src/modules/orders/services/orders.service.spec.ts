@@ -97,7 +97,7 @@ describe('OrdersService', () => {
     });
   });
 
-  it('submits an InstaPay receipt once and triggers the received email afterward', async () => {
+  it('submits an InstaPay receipt once and streams a separate attachment to each recipient', async () => {
     const current = order('WAITING_FOR_PAYMENT');
     const submitted = {
       ...current,
@@ -109,7 +109,10 @@ describe('OrdersService', () => {
     };
     const emailedOrders: OrderRecord[] = [];
     const stream = Readable.from([Buffer.from('receipt')]);
+    const adminStream = Readable.from([Buffer.from('receipt')]);
+    const streams = [stream, adminStream];
     const emailedReceipts: Array<{ stream: Readable; contentType: string } | undefined> = [];
+    const adminReceipts: typeof emailedReceipts = [];
     const repository = {
       findCustomerOrder: () => Promise.resolve(current),
       submitInstaPayProof: () => Promise.resolve(submitted),
@@ -127,7 +130,7 @@ describe('OrdersService', () => {
       deleteImage: () => Promise.resolve(),
       readPaymentProof: () =>
         Promise.resolve({
-          stream,
+          stream: streams.shift(),
           contentType: 'image/png',
           bytes: 100,
         }),
@@ -153,6 +156,16 @@ describe('OrdersService', () => {
           emailedReceipts.push(receipt);
           return Promise.resolve();
         },
+        sendNewOrderNotification: (
+          emailedOrder: OrderRecord,
+          receipt: (typeof adminReceipts)[number],
+          receiptSubmitted: boolean,
+        ) => {
+          expect(emailedOrder).toBe(submitted);
+          expect(receiptSubmitted).toBe(true);
+          adminReceipts.push(receipt);
+          return Promise.resolve();
+        },
       } as unknown as MailService,
       storage,
     );
@@ -167,6 +180,9 @@ describe('OrdersService', () => {
     expect(response.payment).not.toHaveProperty('proofImagePublicId');
     expect(emailedOrders).toEqual([submitted]);
     expect(emailedReceipts).toEqual([{ stream, contentType: 'image/png', bytes: 100 }]);
+    expect(adminReceipts).toEqual([{ stream: adminStream, contentType: 'image/png', bytes: 100 }]);
+    expect(stream.destroyed).toBe(true);
+    expect(adminStream.destroyed).toBe(true);
   });
 
   it('does not read receipt storage for customers or guests who do not own the order', async () => {

@@ -41,6 +41,12 @@ export function getOrder(orderNumber: string): Promise<Order> {
   return apiRequest(`/checkout/orders/${encodeURIComponent(orderNumber)}`);
 }
 
+export function cancelOrder(orderNumber: string): Promise<Order> {
+  return apiRequest(`/checkout/orders/${encodeURIComponent(orderNumber)}/cancel`, {
+    method: 'POST',
+  });
+}
+
 export function submitInstaPayProof(orderNumber: string, file: File): Promise<Order> {
   const body = new FormData();
   body.append('file', file);

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   HttpCode,
   Param,
@@ -20,6 +21,7 @@ import { streamPaymentProof } from '../../uploads/utils/payment-proof-response.u
 
 import { OptionalCurrentUser } from '../../../common/decorators/optional-current-user.decorator.js';
 import { Public } from '../../../common/decorators/public.decorator.js';
+import { RequireCsrfToken } from '../../../common/decorators/skip-csrf.decorator.js';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface.js';
 import { OrderResponseDto } from '../../orders/dto/order.dto.js';
 import { OrdersService } from '../../orders/services/orders.service.js';
@@ -99,6 +101,24 @@ export class CheckoutController {
   ): Promise<OrderResponseDto> {
     const owner = this.identity.resolve(request, response, user, GUEST_CART_COOKIE, false);
     return this.orders.shopperOrder(owner, orderNumber);
+  }
+
+  @Post('orders/:orderNumber/cancel')
+  @HttpCode(200)
+  @RequireCsrfToken()
+  @ApiOperation({ summary: 'Cancel a current shopper order before confirmation' })
+  @ApiOkResponse({ type: OrderResponseDto })
+  cancel(
+    @OptionalCurrentUser() user: AuthenticatedUser | undefined,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+    @Param('orderNumber') orderNumber: string,
+  ): Promise<OrderResponseDto> {
+    if (user && user.role !== 'CUSTOMER') {
+      throw new ForbiddenException('Customer order access is required.');
+    }
+    const owner = this.identity.resolve(request, response, user, GUEST_CART_COOKIE, false);
+    return this.orders.cancelShopperOrder(owner, orderNumber);
   }
 
   @Post('orders/:orderNumber/payment-proof')

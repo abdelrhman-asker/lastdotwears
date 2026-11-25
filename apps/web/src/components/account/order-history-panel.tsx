@@ -3,6 +3,7 @@
 import Image from '@/components/shared/media-image';
 import Link from 'next/link';
 import { useState } from 'react';
+import { CancelOrderButton } from '@/components/storefront/cancel-order-button';
 
 import { Button } from '@/components/ui/button';
 import { StatusMessage } from '@/components/ui/status-message';
@@ -26,6 +27,7 @@ const statuses: Array<{ value: '' | OrderStatus; label: string }> = [
 export function OrderHistoryPanel() {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<'' | OrderStatus>('');
+  const [cancelledOrder, setCancelledOrder] = useState<string | null>(null);
   const orders = useOrderHistory(page, status || undefined);
 
   return (
@@ -65,6 +67,11 @@ export function OrderHistoryPanel() {
       {orders.isError ? (
         <div className="mt-8">
           <StatusMessage tone="error">{errorMessage(orders.error)}</StatusMessage>
+        </div>
+      ) : null}
+      {cancelledOrder ? (
+        <div className="mt-8" role="status">
+          <StatusMessage tone="success">Order {cancelledOrder} was cancelled.</StatusMessage>
         </div>
       ) : null}
 
@@ -147,6 +154,11 @@ export function OrderHistoryPanel() {
               >
                 Invoice
               </Link>
+              <CancelOrderButton
+                orderNumber={order.orderNumber}
+                canCancel={order.canCancel}
+                onCancelled={() => setCancelledOrder(order.orderNumber)}
+              />
             </div>
           </article>
         ))}

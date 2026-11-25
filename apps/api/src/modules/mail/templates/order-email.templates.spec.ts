@@ -1,11 +1,20 @@
-import type { OrderMailDetails } from '../interfaces/mail-service.interface.js';
+import type { AdminOrderMailDetails } from '../interfaces/mail-service.interface.js';
 import {
   buildNewOrderNotificationEmail,
+  buildOrderCancelledEmail,
   buildOrderConfirmedEmail,
   buildOrderReceivedEmail,
 } from './order-email.templates.js';
 
-const order: OrderMailDetails = {
+const order: AdminOrderMailDetails = {
+  id: 'order-id',
+  createdAt: new Date('2026-08-30T10:00:00Z'),
+  customerPhone: '01012345678',
+  paymentStatus: 'PENDING',
+  shippingAddressLine1: '12 Example Street',
+  shippingAddressLine2: 'Flat 4',
+  shippingPostalCode: '11511',
+  deliveryNotes: 'Call <before> delivery',
   customerEmail: 'customer@example.com',
   customerFirstName: 'Sample',
   customerLastName: 'Customer',
@@ -66,13 +75,42 @@ describe('order email templates', () => {
   });
 
   it('builds a merchant notification with the customer and order details', () => {
-    const message = buildNewOrderNotificationEmail(order);
+    const url = 'https://www.last-dot.com/admin/orders/order-id';
+    const message = buildNewOrderNotificationEmail(order, url);
 
     expect(message.subject).toBe('New order #LDW-20260830-ABC12345');
-    expect(message.text).toContain('Sample Customer <customer@example.com>');
-    expect(message.text).toContain('Everyday Shirt');
-    expect(message.text).toContain('Total:');
+    for (const detail of [
+      'Sample Customer',
+      'customer@example.com',
+      '2026-08-30T10:00:00.000Z',
+      '01012345678',
+      '12 Example Street, Flat 4, Nasr City, Cairo, 11511',
+      'Everyday Shirt',
+      'SHIRT-BLK-M',
+      'Black',
+      'Qty 2',
+      'Subtotal:',
+      'Discount:',
+      'Shipping:',
+      'Total:',
+      'Payment status:',
+      'Order status:',
+      'Call <before> delivery',
+      url,
+    ])
+      expect(message.text).toContain(detail);
     expect(message.html).toContain('Merchant notification');
+    expect(message.html).toContain('Call &lt;before&gt; delivery');
+  });
+
+  it('keeps the manual refund alert in the merchant cancellation notification', () => {
+    const url = 'https://www.last-dot.com/admin/orders/order-id';
+    const customer = buildOrderCancelledEmail(order);
+    const admin = buildOrderCancelledEmail(order, { url, refundReview: true });
+    expect(customer.text).toContain('Your order has been cancelled');
+    expect(customer.text).not.toContain(url);
+    expect(admin.text).toContain(url);
+    expect(admin.html).toContain('manual refund');
   });
 
   it('escapes customer and catalog values in HTML', () => {
