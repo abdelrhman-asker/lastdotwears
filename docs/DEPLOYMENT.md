@@ -18,6 +18,8 @@ existing cookie, JWT, and pepper secrets to preserve existing sessions and token
 Use the Neon pooled URL for the runner. Leave API build arguments empty. Use the shared SMTP host
 shown in the Zoho account settings. Port 465 pairs with `SMTP_SECURE=true`. Port 587 pairs with
 `SMTP_SECURE=false` and requires STARTTLS.
+When `SMTP_SECURE` is unset or blank, the API selects implicit TLS on port 465 and STARTTLS on
+other ports. The structured `mail.transport.initialized` event reports the selected mode.
 
 Configure both mailbox logins on the API service before deployment.
 

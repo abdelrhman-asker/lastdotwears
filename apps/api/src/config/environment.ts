@@ -68,7 +68,10 @@ export const environmentSchema = z
     ORDER_NOTIFICATION_EMAIL: z.email().default('orders@last-dot.com'),
     SMTP_HOST: optionalNonEmptyString,
     SMTP_PORT: z.coerce.number().int().min(1).max(65_535).default(587),
-    SMTP_SECURE: booleanFromString.default(false),
+    SMTP_SECURE: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      booleanFromString.optional(),
+    ),
     SMTP_USER: optionalNonEmptyString,
     SMTP_PASSWORD: optionalNonEmptyString,
     SUPPORT_SMTP_USER: optionalNonEmptyString,
@@ -172,7 +175,11 @@ export const environmentSchema = z
         message: 'SMTP_HOST is required when MAIL_TRANSPORT is smtp.',
       });
     }
-  });
+  })
+  .transform((environment) => ({
+    ...environment,
+    SMTP_SECURE: environment.SMTP_SECURE ?? environment.SMTP_PORT === 465,
+  }));
 
 export type AppEnvironment = z.infer<typeof environmentSchema>;
 

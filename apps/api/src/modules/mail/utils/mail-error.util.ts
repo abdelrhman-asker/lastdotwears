@@ -14,6 +14,7 @@ const knownCodes = new Set([
   'ESOCKET',
   'ETIMEDOUT',
   'ETLS',
+  'ETRANSPORT',
 ]);
 const knownCommands = new Set([
   'API',
@@ -30,21 +31,30 @@ const knownCommands = new Set([
   'STARTTLS',
 ]);
 
-export function mailErrorDetails(error: unknown): string {
-  if (!(error instanceof Error)) return 'Unknown mail provider error.';
+export function mailErrorMetadata(error: unknown): {
+  code?: string;
+  command?: string;
+  responseCode?: number;
+} {
+  if (!(error instanceof Error)) return {};
   const record = error as Error & Record<string, unknown>;
   const { code, command, responseCode } = record;
-  const metadata: string[] = [];
-  if (typeof code === 'string' && knownCodes.has(code)) metadata.push('code=' + code);
-  if (typeof command === 'string' && knownCommands.has(command))
-    metadata.push('command=' + command);
-  if (
-    typeof responseCode === 'number' &&
+  return {
+    ...(typeof code === 'string' && knownCodes.has(code) ? { code } : {}),
+    ...(typeof command === 'string' && knownCommands.has(command) ? { command } : {}),
+    ...(typeof responseCode === 'number' &&
     Number.isInteger(responseCode) &&
     responseCode >= 100 &&
     responseCode <= 599
-  ) {
-    metadata.push('responseCode=' + String(responseCode));
-  }
+      ? { responseCode }
+      : {}),
+  };
+}
+
+export function mailErrorDetails(error: unknown): string {
+  if (!(error instanceof Error)) return 'Unknown mail provider error.';
+  const metadata = Object.entries(mailErrorMetadata(error)).map(
+    ([field, value]) => field + '=' + String(value),
+  );
   return ['Mail operation error', ...metadata].join(' ');
 }

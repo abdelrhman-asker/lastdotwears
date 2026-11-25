@@ -22,24 +22,49 @@ const saved: ContactMessageRecord = {
   updatedAt: new Date('2026-08-03T00:00:00Z'),
 };
 
+function deferred() {
+  let complete!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    complete = resolve;
+  });
+  return { promise, resolve: complete };
+}
+
 describe('ContactService', () => {
-  it('returns after persistence without waiting for email delivery', async () => {
+  it('waits for both delivery attempts after persistence', async () => {
     const repository = { create: () => Promise.resolve(saved) } as unknown as ContactRepository;
-    const pendingMail = new Promise<void>(() => undefined);
+    const acknowledgment = deferred();
+    const notification = deferred();
+    const started = deferred();
     const mail = {
-      sendContactAcknowledgement: () => pendingMail,
-      sendContactNotification: () => pendingMail,
+      sendContactAcknowledgement: () => acknowledgment.promise,
+      sendContactNotification: () => {
+        started.resolve();
+        return notification.promise;
+      },
     } as unknown as MailService;
     const subject = new ContactService(repository, mail);
-
-    await expect(
-      subject.submit({
+    let completed = false;
+    const response = subject
+      .submit({
         name: saved.name,
         email: saved.email,
         subject: saved.subject,
         message: saved.message,
-      }),
-    ).resolves.toEqual({ id: saved.id, message: 'Your message has been received.' });
+      })
+      .then((result) => {
+        completed = true;
+        return result;
+      });
+    await started.promise;
+    acknowledgment.resolve();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(completed).toBe(false);
+    notification.resolve();
+    await expect(response).resolves.toEqual({
+      id: saved.id,
+      message: 'Your message has been received.',
+    });
   });
 
   it.each(['notification', 'acknowledgment'])(

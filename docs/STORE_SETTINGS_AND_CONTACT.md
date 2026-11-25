@@ -24,7 +24,8 @@ validation as product imagery; root-relative bundled images remain supported for
 `POST /api/v1/contact` accepts a name, email, optional phone/order number, subject, and message. It
 is public, globally validated, and additionally limited to five requests per hour by the API rate
 limiter. The message is committed before email is attempted, so an SMTP failure cannot discard a
-customer request.
+customer request. The HTTP response waits for both independent attempts and confirms the message
+was saved even if SMTP rejects a delivery.
 
 The support transport sends a notification to `SUPPORT_NOTIFICATION_EMAIL` with the saved
 submission time and the customer's validated address as Reply-To. It also sends a separate
@@ -88,6 +89,11 @@ Contact emails, account verification and password resets use the support login. 
 [API deployment settings](DEPLOYMENT.md#northflank-developer-sandbox) for the runtime variables.
 
 ## Verification
+
+After building the API, run `node apps/api/scripts/check-contact-smtp.mjs` from the repository
+root. The test starts the compiled production entrypoint and a loopback TLS SMTP fixture. It
+uses an in-memory contact repository and requires OpenSSL on PATH or in `OPENSSL_BIN`. Pass
+`--implicit-port` to exercise port 465 with `SMTP_SECURE` unset when that port is available.
 
 Coverage includes payment-method invariants, banner schedule validation, persisted contact behavior
 during SMTP failure, resolution timestamps, contact-form validation, protected administration

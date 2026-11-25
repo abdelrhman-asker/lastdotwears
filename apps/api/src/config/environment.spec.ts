@@ -15,6 +15,22 @@ const validEnvironment = {
 };
 
 describe('validateEnvironment', () => {
+  it.each([
+    ['465', undefined, true],
+    ['465', '', true],
+    ['587', undefined, false],
+    ['2525', 'true', true],
+    ['2525', 'false', false],
+  ])('resolves SMTP TLS mode for port %s when SMTP_SECURE is %s', (port, secure, expected) => {
+    expect(
+      validateEnvironment({
+        ...validEnvironment,
+        SMTP_PORT: port,
+        SMTP_SECURE: secure,
+      }).SMTP_SECURE,
+    ).toBe(expected);
+  });
+
   it('defaults the support sender and destination independently of the public address', () => {
     expect(
       validateEnvironment({ ...validEnvironment, MAIL_FROM_EMAIL: 'public@example.test' }),

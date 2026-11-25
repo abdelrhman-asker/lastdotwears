@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 
 import { MAIL_SERVICE, type MailService } from '../../mail/interfaces/mail-service.interface.js';
-import { mailErrorDetails } from '../../mail/utils/mail-error.util.js';
+import { mailErrorMetadata } from '../../mail/utils/mail-error.util.js';
 import type {
   AdminContactListQueryDto,
   ContactSubmissionResponseDto,
@@ -33,28 +33,41 @@ export class ContactService {
       subject: input.subject,
       message: input.message,
     });
+    this.logger.log({ event: 'contact.message.saved', contactMessageId: saved.id });
     const firstName = saved.name.split(/\s+/)[0] || saved.name;
-    void this.deliver(saved.id, 'acknowledgment', () =>
-      this.mail.sendContactAcknowledgement({ email: saved.email, firstName }, saved.subject),
-    );
-    void this.deliver(saved.id, 'notification', () =>
-      this.mail.sendContactNotification({
-        name: saved.name,
-        email: saved.email,
-        phone: saved.phone,
-        subject: saved.subject,
-        body: saved.message,
-        submittedAt: saved.createdAt,
-      }),
-    );
+    await Promise.all([
+      this.deliver(saved.id, 'acknowledgment', () =>
+        this.mail.sendContactAcknowledgement({ email: saved.email, firstName }, saved.subject),
+      ),
+      this.deliver(saved.id, 'notification', () =>
+        this.mail.sendContactNotification({
+          name: saved.name,
+          email: saved.email,
+          phone: saved.phone,
+          subject: saved.subject,
+          body: saved.message,
+          submittedAt: saved.createdAt,
+        }),
+      ),
+    ]);
     return { id: saved.id, message: 'Your message has been received.' };
   }
 
-  private async deliver(id: string, kind: string, send: () => Promise<void>): Promise<void> {
+  private async deliver(
+    contactMessageId: string,
+    delivery: 'acknowledgment' | 'notification',
+    send: () => Promise<void>,
+  ): Promise<void> {
+    this.logger.log({ event: 'contact.email.started', contactMessageId, delivery });
     try {
       await send();
     } catch (error) {
-      this.logger.error(`Contact ${kind} failed for message ${id}: ${mailErrorDetails(error)}`);
+      this.logger.error({
+        event: 'contact.email.failed',
+        contactMessageId,
+        delivery,
+        ...mailErrorMetadata(error),
+      });
     }
   }
 

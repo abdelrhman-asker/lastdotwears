@@ -21,7 +21,7 @@ import {
   type OrderEmailTemplate,
 } from '../templates/order-email.templates.js';
 import { escapeHtml } from '../templates/mail-template.util.js';
-import { mailErrorDetails } from '../utils/mail-error.util.js';
+import { mailErrorDetails, mailErrorMetadata } from '../utils/mail-error.util.js';
 
 type MailChannel = 'orders' | 'support';
 type SmtpTransport = Transporter<SMTPTransport.SentMessageInfo>;
@@ -244,7 +244,15 @@ export class TransactionalMailService implements MailService {
       return null;
     }
     try {
-      return nodemailer.createTransport({ ...options, auth: { user, pass } });
+      const transport = nodemailer.createTransport({ ...options, auth: { user, pass } });
+      this.logger.log({
+        event: 'mail.transport.initialized',
+        channel,
+        transport: 'smtp',
+        port: options.port,
+        tlsMode: options.secure ? 'implicit-tls' : 'starttls',
+      });
+      return transport;
     } catch (error) {
       this.logger.error(
         `SMTP ${channel} transport initialization failed: ${mailErrorDetails(error)}`,
@@ -321,22 +329,35 @@ export class TransactionalMailService implements MailService {
     kind: string,
     message: SendMailOptions,
   ): Promise<void> {
+    const transporter = this.transports[channel];
+    const context = { channel, delivery: kind };
+    this.logger.log({
+      event: 'mail.transport.selected',
+      ...context,
+      transport: this.logOnly ? 'log' : 'smtp',
+      available: this.logOnly || Boolean(transporter),
+    });
     if (this.logOnly) {
-      this.logger.log(`Log-only ${channel} mail: ${kind}`);
+      this.logger.log({ event: 'mail.delivery.skipped', ...context, reason: 'log-only' });
       return;
     }
     try {
-      const transporter = this.transports[channel];
-      if (!transporter) throw new Error('SMTP transport is unavailable.');
+      if (!transporter) {
+        throw Object.assign(new Error('SMTP transport is unavailable.'), { code: 'ETRANSPORT' });
+      }
       const result = await transporter.sendMail(message);
       if (result.accepted.length === 0) {
         throw Object.assign(new Error('SMTP did not accept the recipient.'), {
           code: 'ERECIPIENT',
         });
       }
-      this.logger.log(`SMTP ${channel} accepted ${kind}`);
+      this.logger.log({ event: 'mail.smtp.accepted', ...context });
     } catch (error) {
-      this.logger.error(`SMTP ${channel} failed to send ${kind}: ${mailErrorDetails(error)}`);
+      this.logger.error({
+        event: 'mail.smtp.rejected',
+        ...context,
+        ...mailErrorMetadata(error),
+      });
       throw error;
     }
   }
